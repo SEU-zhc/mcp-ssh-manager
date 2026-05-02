@@ -5,6 +5,34 @@ All notable changes to MCP SSH Manager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-05-02
+
+### Added
+
+- **ProxyCommand support** for SOCKS5 and custom proxy connections ([#24](https://github.com/bvisible/mcp-ssh-manager/pull/24))
+  - New `SSH_SERVER_<NAME>_PROXYCOMMAND` env var (and `proxy_command` in TOML) to specify a custom command (e.g. `ncat --proxy 127.0.0.1:1080 --proxy-type socks5 %h %p`, `ssh -W %h:%p bastion`).
+  - Useful for reaching servers behind SOCKS5 proxies, custom jump hosts, or any scenario the existing `ProxyJump` doesn't cover.
+
+### Fixed
+
+- **`ssh_execute` timeout silently capped at 30 s** when the requested timeout was below 300 000 ms ([#28](https://github.com/bvisible/mcp-ssh-manager/issues/28), [#29](https://github.com/bvisible/mcp-ssh-manager/pull/29) — thanks @LukasOrcik for the precise root-cause analysis and @MakksSh for the patch)
+  - In `execCommandWithTimeout`, the wrapped `timeout NNN sh -c …` path forwarded `otherOptions` to `ssh.execCommand` without a `timeout` key, so the underlying `SSHManager.execCommand` fell back to its hardcoded 30 000 ms default. The local stream was aborted at 30 s while the remote `timeout` wrapper was still running.
+  - Now passes `timeout: timeoutMs + 5000` so the inner timer always exceeds the requested timeout. The +5000 grace lets the remote `timeout` binary return exit code 124/143 first, surfacing the nicer `Command timeout after Nms` message instead of a stream abort.
+
+- **Windows global install fails with `/bin/bash` shim error** ([#22](https://github.com/bvisible/mcp-ssh-manager/issues/22), [#23](https://github.com/bvisible/mcp-ssh-manager/pull/23) — confirmed by @Eleef on Win11 / PS7)
+  - npm's PowerShell shim refused to launch the legacy bash entry point because Windows has no `/bin/bash.exe`.
+  - New cross-platform `cli/ssh-manager.js` Node wrapper is now the `bin.ssh-manager` entry point. On Windows it probes Git Bash → WSL → `bash` on PATH (with proper `C:\…` → `/c/…` and `/mnt/c/…` path conversion); on Unix it just `spawnSync`s `bash`.
+
+- **`server add` blocked at startup by missing `rsync`** ([#22](https://github.com/bvisible/mcp-ssh-manager/issues/22) follow-up, [#26](https://github.com/bvisible/mcp-ssh-manager/pull/26))
+  - `rsync` was in the **required** dependency list, but it's only used by `ssh-manager sync`. Git for Windows doesn't ship `rsync`, so the CLI was unusable on a stock Windows install for users who never call `sync`.
+  - `rsync` is now optional. `cmd_sync` checks lazily and emits an actionable error with install hints for macOS / Debian / Windows (MSYS2 + WSL).
+
+- **`server add` accepted hyphens in server names, producing entries invisible to MCP clients** ([#25](https://github.com/bvisible/mcp-ssh-manager/issues/25), [#27](https://github.com/bvisible/mcp-ssh-manager/pull/27) — thanks @alexeibugrov)
+  - The Bash CLI used a loose regex when reading `.env` and accepted `web-server`, but POSIX env-var names disallow hyphens. The MCP Node loader uses a strict `/^SSH_SERVER_([A-Z0-9_]+)_HOST$/` and silently dropped the entry, so Claude Code reported zero servers while the CLI listed them.
+  - `validate_server_name` now rejects `-` (and any other non-`[A-Za-z0-9_]`) at the prompt, with a copy-paste suggestion (`web-server` → `Try 'web_server' instead`).
+  - `server list` detects pre-existing invalid entries, marks each affected row with `⚠ invalid`, and prints a warning block telling the user how to migrate.
+  - Prompt examples updated from `web-server` to `web_server` in both `server add` and the interactive wizard.
+
 ## [3.1.2] - 2026-02-09
 
 ### Fixed
