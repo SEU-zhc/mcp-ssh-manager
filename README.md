@@ -14,6 +14,10 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 </div>
 
+<p align="center">
+  <img src="docs/images/ssh-manager-cli-menu.png" alt="ssh-manager interactive CLI menu" width="900">
+</p>
+
 ---
 
 ## 🎉 What's New in v3.3.0
