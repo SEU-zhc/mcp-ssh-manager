@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 [![npm version](https://img.shields.io/npm/v/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
 [![npm downloads](https://img.shields.io/npm/dt/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
-[![Version](https://img.shields.io/badge/Version-3.2.2-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.2.2)
+[![Version](https://img.shields.io/badge/Version-3.3.0-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.3.0)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-5A67D8?style=for-the-badge&logo=anthropic)](https://claude.ai/code)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-Compatible-00A67E?style=for-the-badge&logo=openai)](https://openai.com/codex)
 [![MCP](https://img.shields.io/badge/MCP-Server-orange?style=for-the-badge)](https://modelcontextprotocol.io)
@@ -16,19 +16,46 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 ---
 
-## 🎉 What's New in v3.2.2
+## 🎉 What's New in v3.3.0
 
-**Global Install Fix & CLI Binary** (Released: April 7, 2026)
+**ProxyCommand support + 4 critical bug fixes** (Released: May 2, 2026)
+
+- **🔌 ProxyCommand support** — connect through SOCKS5 proxies or any custom proxy command ([#24](https://github.com/bvisible/mcp-ssh-manager/pull/24))
+  - New `SSH_SERVER_<NAME>_PROXYCOMMAND` env var (or `proxy_command` in TOML)
+  - Examples: `ncat --proxy 127.0.0.1:1080 --proxy-type socks5 %h %p`, `ssh -W %h:%p bastion`
+  - Useful for scenarios `ProxyJump` doesn't cover
+- **⏱️ `ssh_execute` timeout silently capped at 30 s** — fixed ([#28](https://github.com/bvisible/mcp-ssh-manager/issues/28), [#29](https://github.com/bvisible/mcp-ssh-manager/pull/29))
+  - The wrapped `timeout NNN sh -c …` path forwarded options to `ssh.execCommand` without a `timeout` key, so the underlying SSH manager fell back to its hardcoded 30 s default
+  - Now passes `timeout: timeoutMs + 5000` (5 s grace so the remote `timeout` binary can return exit 124/143 first)
+  - Thanks [@LukasOrcik](https://github.com/LukasOrcik) for the precise root-cause analysis and [@MakksSh](https://github.com/MakksSh) for the patch
+- **🪟 Windows global install fails with `/bin/bash` shim error** — fixed ([#22](https://github.com/bvisible/mcp-ssh-manager/issues/22), [#23](https://github.com/bvisible/mcp-ssh-manager/pull/23))
+  - New cross-platform `cli/ssh-manager.js` Node wrapper as the `bin.ssh-manager` entry point
+  - On Windows: probes Git Bash → WSL → `bash` on PATH (with `C:\…` ↔ `/c/…`/`/mnt/c/…` path conversion)
+  - On Unix: just `spawnSync`s `bash`
+  - Confirmed by [@Eleef](https://github.com/Eleef) on Win11 / PS7
+- **🔧 `server add` blocked at startup by missing `rsync`** — fixed ([#22](https://github.com/bvisible/mcp-ssh-manager/issues/22) follow-up, [#26](https://github.com/bvisible/mcp-ssh-manager/pull/26))
+  - `rsync` is now optional; only required by `ssh-manager sync`
+  - Lazy check emits an actionable error with install hints (macOS / Debian / Windows)
+  - Git for Windows users no longer need to install `rsync` to use the rest of the CLI
+- **🔡 `server add` accepted hyphens in server names, producing entries invisible to MCP clients** — fixed ([#25](https://github.com/bvisible/mcp-ssh-manager/issues/25), [#27](https://github.com/bvisible/mcp-ssh-manager/pull/27))
+  - POSIX env-var names disallow hyphens; the MCP loader silently dropped `SSH_SERVER_WEB-SERVER_HOST=…`
+  - `validate_server_name` now rejects `-` at the prompt with a copy-paste suggestion (`web-server` → `Try 'web_server' instead`)
+  - `server list` flags pre-existing invalid entries with `⚠ invalid` and explains how to migrate
+  - Thanks [@alexeibugrov](https://github.com/alexeibugrov) for the impeccable bug report
+
+[Read full changelog →](CHANGELOG.md#330---2026-05-02)
+
+---
+
+## Previous Releases
+
+### v3.2.2 - Global Install Fix & CLI Binary (April 7, 2026)
 
 - **🔧 Global install fixed**: `.env` path resolution now uses a fallback chain instead of hardcoded `__dirname` — works correctly with `npm install -g` ([#16](https://github.com/bvisible/mcp-ssh-manager/issues/16), [#19](https://github.com/bvisible/mcp-ssh-manager/issues/19))
   - Fallback chain: `~/.ssh-manager/.env` → `cwd/.env` → `~/.env` → project `.env`
   - Auto-creates `~/.ssh-manager/.env` on first `ssh-manager server add`
 - **📦 `ssh-manager` CLI registered as binary**: `npm install -g` now creates both `mcp-ssh-manager` and `ssh-manager` commands ([#18](https://github.com/bvisible/mcp-ssh-manager/issues/18))
 - **⚡ Race condition fix**: Server config is now fully loaded before the MCP server accepts requests
-
----
-
-## Previous Releases
 
 ### v3.2.0 - ProxyJump / Bastion Host Support (March 18, 2026)
 
