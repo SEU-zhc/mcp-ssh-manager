@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 [![npm version](https://img.shields.io/npm/v/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
 [![npm downloads](https://img.shields.io/npm/dt/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
-[![Version](https://img.shields.io/badge/Version-3.3.0-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.3.0)
+[![Version](https://img.shields.io/badge/Version-3.4.0-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.4.0)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-5A67D8?style=for-the-badge&logo=anthropic)](https://claude.ai/code)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-Compatible-00A67E?style=for-the-badge&logo=openai)](https://openai.com/codex)
 [![MCP](https://img.shields.io/badge/MCP-Server-orange?style=for-the-badge)](https://modelcontextprotocol.io)
@@ -20,38 +20,35 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 ---
 
-## 🎉 What's New in v3.3.0
+## 🎉 What's New in v3.4.0
 
-**ProxyCommand support + 4 critical bug fixes** (Released: May 2, 2026)
+**Full Windows OpenSSH support + shell-agnostic session sync** (Released: May 7, 2026)
 
-- **🔌 ProxyCommand support** — connect through SOCKS5 proxies or any custom proxy command ([#24](https://github.com/bvisible/mcp-ssh-manager/pull/24))
-  - New `SSH_SERVER_<NAME>_PROXYCOMMAND` env var (or `proxy_command` in TOML)
-  - Examples: `ncat --proxy 127.0.0.1:1080 --proxy-type socks5 %h %p`, `ssh -W %h:%p bastion`
-  - Useful for scenarios `ProxyJump` doesn't cover
-- **⏱️ `ssh_execute` timeout silently capped at 30 s** — fixed ([#28](https://github.com/bvisible/mcp-ssh-manager/issues/28), [#29](https://github.com/bvisible/mcp-ssh-manager/pull/29))
-  - The wrapped `timeout NNN sh -c …` path forwarded options to `ssh.execCommand` without a `timeout` key, so the underlying SSH manager fell back to its hardcoded 30 s default
-  - Now passes `timeout: timeoutMs + 5000` (5 s grace so the remote `timeout` binary can return exit 124/143 first)
-  - Thanks [@LukasOrcik](https://github.com/LukasOrcik) for the precise root-cause analysis and [@MakksSh](https://github.com/MakksSh) for the patch
-- **🪟 Windows global install fails with `/bin/bash` shim error** — fixed ([#22](https://github.com/bvisible/mcp-ssh-manager/issues/22), [#23](https://github.com/bvisible/mcp-ssh-manager/pull/23))
-  - New cross-platform `cli/ssh-manager.js` Node wrapper as the `bin.ssh-manager` entry point
-  - On Windows: probes Git Bash → WSL → `bash` on PATH (with `C:\…` ↔ `/c/…`/`/mnt/c/…` path conversion)
-  - On Unix: just `spawnSync`s `bash`
-  - Confirmed by [@Eleef](https://github.com/Eleef) on Win11 / PS7
-- **🔧 `server add` blocked at startup by missing `rsync`** — fixed ([#22](https://github.com/bvisible/mcp-ssh-manager/issues/22) follow-up, [#26](https://github.com/bvisible/mcp-ssh-manager/pull/26))
-  - `rsync` is now optional; only required by `ssh-manager sync`
-  - Lazy check emits an actionable error with install hints (macOS / Debian / Windows)
-  - Git for Windows users no longer need to install `rsync` to use the rest of the CLI
-- **🔡 `server add` accepted hyphens in server names, producing entries invisible to MCP clients** — fixed ([#25](https://github.com/bvisible/mcp-ssh-manager/issues/25), [#27](https://github.com/bvisible/mcp-ssh-manager/pull/27))
-  - POSIX env-var names disallow hyphens; the MCP loader silently dropped `SSH_SERVER_WEB-SERVER_HOST=…`
-  - `validate_server_name` now rejects `-` at the prompt with a copy-paste suggestion (`web-server` → `Try 'web_server' instead`)
-  - `server list` flags pre-existing invalid entries with `⚠ invalid` and explains how to migrate
-  - Thanks [@alexeibugrov](https://github.com/alexeibugrov) for the impeccable bug report
+- **🪟 Windows OpenSSH targets — encoding & syntax fixes** ([#31](https://github.com/bvisible/mcp-ssh-manager/pull/31))
+  - **Mojibake fix** — Commands on Windows hosts no longer inherit the OEM code page (CP950, CP932, CP1252…). Payloads are now wrapped as `powershell -NoProfile -OutputFormat Text -EncodedCommand <utf16le-base64>` (the same approach used by Ansible / Chef / Puppet for Windows remote execution), sidestepping every `cmd.exe` quoting and code-page issue
+  - **`cd && ` syntax fix** — `cd ${workingDir} && ${cmd}` is invalid in `cmd.exe`; replaced with `Set-Location '${escapedDir}'; ${cmd}` (PowerShell-native, with `'` → `''` escaping) across `ssh_execute`, `ssh_execute_group`, and `ssh_execute_sudo`
+  - Strictly gated behind `platform = "windows"` — Linux/macOS targets take the exact same code path as before, zero risk of regression
+  - Thanks [@WenKingSu](https://github.com/WenKingSu) for the clean, well-documented patch
+- **🎯 Marker-based SSH session sync — replaces fragile prompt detection** ([#30](https://github.com/bvisible/mcp-ssh-manager/pull/30))
+  - The previous `/[$#>]\s*$/` regex broke on custom prompts, ANSI color codes, multiline prompts, slow shells, `.bashrc` noise, AIX-style login flows — `ssh_session_start` would frequently fail with "Timeout waiting for shell prompt"
+  - Now uses **UUID v4 markers** as protocol boundaries: each command is wrapped with a unique end marker (`set +e; <cmd>; __mcp_status=$?; printf '\n<marker>:%s\n' "$__mcp_status"`), and the PTY is opened with `ECHO: 0` so the buffer contains only command output
+  - **Bonus**: sessions now report **real exit codes** captured from `$?` instead of the previous `!output.includes('command not found')` heuristic
+  - Resolves [#20](https://github.com/bvisible/mcp-ssh-manager/issues/20) and supersedes the proposed configurable `prompt_pattern` approach by making the problem disappear entirely — no per-server config required
+  - Thanks [@MakksSh](https://github.com/MakksSh) for the precise root-cause analysis and the clean refactor
 
-[Read full changelog →](CHANGELOG.md#330---2026-05-02)
+[Read full changelog →](CHANGELOG.md#340---2026-05-07)
 
 ---
 
 ## Previous Releases
+
+### v3.3.0 - ProxyCommand & Critical Fixes (May 2, 2026)
+
+- **🔌 ProxyCommand support** for SOCKS5 / custom proxy commands ([#24](https://github.com/bvisible/mcp-ssh-manager/pull/24))
+- **⏱️ `ssh_execute` timeout silently capped at 30 s** — fixed ([#28](https://github.com/bvisible/mcp-ssh-manager/issues/28), [#29](https://github.com/bvisible/mcp-ssh-manager/pull/29))
+- **🪟 Windows global install `/bin/bash` shim error** — fixed ([#22](https://github.com/bvisible/mcp-ssh-manager/issues/22), [#23](https://github.com/bvisible/mcp-ssh-manager/pull/23))
+- **🔧 `server add` blocked by missing `rsync`** — `rsync` now optional ([#26](https://github.com/bvisible/mcp-ssh-manager/pull/26))
+- **🔡 Hyphenated server names silently dropped** — validation hardened ([#25](https://github.com/bvisible/mcp-ssh-manager/issues/25), [#27](https://github.com/bvisible/mcp-ssh-manager/pull/27))
 
 ### v3.2.2 - Global Install Fix & CLI Binary (April 7, 2026)
 

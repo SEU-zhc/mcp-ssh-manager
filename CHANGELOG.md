@@ -5,6 +5,24 @@ All notable changes to MCP SSH Manager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-05-07
+
+### Added
+
+- **Full Windows OpenSSH command execution** ([#31](https://github.com/bvisible/mcp-ssh-manager/pull/31) — thanks @WenKingSu)
+  - When a server is configured with `platform = "windows"`, commands are now wrapped as `powershell -NoProfile -OutputFormat Text -EncodedCommand <utf16le-base64>`. This is the same approach used by Ansible, Chef, and Puppet for Windows remote execution. It sidesteps every `cmd.exe` quoting and OEM code page issue (CP950, CP932, CP1252…) that was causing mojibake on non-ASCII output.
+  - Prepends `$ProgressPreference='SilentlyContinue'` (suppresses CLIXML progress sentinels in stderr) and `[Console]::OutputEncoding=UTF8` (forces clean UTF-8 stdout).
+  - Working-directory prefix uses `Set-Location '${escapedDir}'; ${cmd}` (PowerShell-native, with `'` → `''` escaping) instead of `cd ${dir} && ${cmd}` which is invalid in `cmd.exe`. Applied consistently across `ssh_execute`, `ssh_execute_group`, and `ssh_execute_sudo`.
+  - Strictly gated behind `platform === 'windows'` — Linux/macOS targets are completely unaffected.
+
+### Fixed
+
+- **`ssh_session_start` timing out on real-world shells** ([#20](https://github.com/bvisible/mcp-ssh-manager/issues/20), [#30](https://github.com/bvisible/mcp-ssh-manager/pull/30) — thanks @MakksSh)
+  - The previous shell-prompt detection used a fragile regex (`/[$#>]\s*$/`) that broke on custom prompts, ANSI color codes, multiline prompts, slow shells, `.bashrc`/profile script noise, and any non-standard prompt symbol. Sessions would frequently fail to initialize with `Timeout waiting for shell prompt`.
+  - Replaced with a marker-based protocol: the PTY is requested with `ECHO: 0`, a unique UUID v4 readiness marker is sent on session start, and every executed command is wrapped with `set +e; <cmd>; __mcp_status=$?; printf '\n<marker>:%s\n' "$__mcp_status"`. The completion marker carries the **real exit code** captured from `$?` instead of the previous `!output.includes('command not found')` heuristic.
+  - A shell prompt is presentation, not a protocol boundary. Marker-based sync is shell-agnostic, deterministic, and requires zero per-server configuration.
+  - Bonus: sessions now report accurate `success`/`exitCode` for downstream consumers.
+
 ## [3.3.0] - 2026-05-02
 
 ### Added
