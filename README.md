@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 [![npm version](https://img.shields.io/npm/v/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
 [![npm downloads](https://img.shields.io/npm/dt/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
-[![Version](https://img.shields.io/badge/Version-3.4.1-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.4.1)
+[![Version](https://img.shields.io/badge/Version-3.5.0-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.5.0)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-5A67D8?style=for-the-badge&logo=anthropic)](https://claude.ai/code)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-Compatible-00A67E?style=for-the-badge&logo=openai)](https://openai.com/codex)
 [![MCP](https://img.shields.io/badge/MCP-Server-orange?style=for-the-badge)](https://modelcontextprotocol.io)
@@ -20,24 +20,34 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 ---
 
-## 🎉 What's New in v3.4.1
+## 🎉 What's New in v3.5.0
 
-**Modern OpenSSH 9.x compatibility** (Released: May 16, 2026)
+**Per-server security modes — `readonly` / `restricted` + audit log** (Released: May 18, 2026)
 
-- **🔐 Expanded SSH algorithm list — handshake against OpenSSH 9.x out of the box** ([#32](https://github.com/bvisible/mcp-ssh-manager/pull/32))
-  - The hardcoded algorithm list in `src/ssh-manager.js` was missing modern algorithms used by **OpenSSH 9.x** servers shipped with **Debian 12** and **Ubuntu 24.04**, causing the `ssh2` lib to fail the key-exchange phase against stock distributions
-  - **KEX**: added `curve25519-sha256` (+`@libssh.org`), `diffie-hellman-group15-sha512` and `diffie-hellman-group16-sha512`
-  - **Server host key**: added `rsa-sha2-512` and `rsa-sha2-256` (RFC 8332 — required since OpenSSH 8.2 deprecated `ssh-rsa` SHA-1 by default)
-  - **Cipher**: added `aes128-gcm@openssh.com` and `aes256-gcm@openssh.com` (preferred GCM variants on modern servers)
-  - **HMAC**: added `hmac-sha2-256-etm@openssh.com`, `hmac-sha2-512-etm@openssh.com`, `hmac-sha1-etm@openssh.com` (encrypt-then-MAC — both faster and cryptographically stronger than encrypt-and-MAC)
-  - **Backward-compatible by design** — all legacy algorithms (`diffie-hellman-group14-sha1`, `ssh-rsa`, CBC ciphers, plain `hmac-sha*`) are preserved at lower preference, so older servers (CentOS 7, Debian 10…) keep working unchanged
-  - Thanks [@YoungHong1992](https://github.com/YoungHong1992) for the well-scoped, well-ordered patch
+A second authorization layer that filters tool invocations **inside the MCP server**, complementing the existing client-side `autoApprove`. Useful when sharing the MCP with a third-party agent, a CI bot, or any client where `ssh_execute` shouldn't be unconditionally trusted.
 
-[Read full changelog →](CHANGELOG.md#341---2026-05-16)
+- **🔒 Three modes, opt-in per server** (no `MODE` field = identical to v3.4.x):
+  - **`unrestricted`** (default) — strict no-op. `evaluatePolicy()` early-returns on the first line, zero overhead.
+  - **`readonly`** — blocks mutating tools (`ssh_upload`, `ssh_deploy`, `ssh_sync`, `ssh_execute_sudo`, `ssh_backup_*`, `ssh_db_import/dump`, plus action-gated `ssh_key_manage accept|remove`, `ssh_alert_setup set`, `ssh_process_manager kill`) AND applies a built-in denylist on `ssh_execute` (rm, mv, dd, mkfs, chmod, chown, sudo, systemctl restart/stop, docker rm/stop, pipe-to-sh, redirect outside `/tmp`, curl|sh, etc.).
+  - **`restricted`** — every command must match at least one `ALLOW_PATTERNS` regex AND no `DENY_PATTERNS` regex. **DENY wins**. With no `ALLOW_PATTERNS` everything is refused (fail-closed).
+- **📝 Audit log** — opt-in JSONL per server (`SSH_SERVER_<N>_AUDIT_LOG=/path/to/audit.jsonl`). Records `ts`, `server`, `tool`, args, `allowed`, `reason` on denial, `exitCode`/`success` on execution. Sensitive arg fields (`password`, `passphrase`, `sudoPassword`, `token`, `secret`, `apikey`) are replaced with `***`.
+- **🪄 Command aliases expanded BEFORE policy evaluation** — a `DENY` pattern can't be bypassed via an alias.
+- **♻️ Backward-compatible by design** — a v3.4.x `.env` or TOML loads identically. No `MODE` field → zero behavior change. The interactive wizard (`ssh-manager server add`) defaults all three new prompts to skip. All 13 pre-existing tests pass unmodified. New `tests/test-policy.js` adds 26 tests covering modes, DENY > ALLOW precedence, invalid-regex handling, redaction, and the backward-compat fast path.
+
+[Full reference →](docs/SECURITY_MODES.md) · [Read full changelog →](CHANGELOG.md#350---2026-05-18)
 
 ---
 
 ## Previous Releases
+
+### v3.4.1 - Modern OpenSSH 9.x compatibility (May 16, 2026)
+
+- **🔐 Expanded SSH algorithm list — handshake against OpenSSH 9.x out of the box** ([#32](https://github.com/bvisible/mcp-ssh-manager/pull/32))
+  - **KEX**: `curve25519-sha256` (+`@libssh.org`), `diffie-hellman-group15-sha512`, `diffie-hellman-group16-sha512`
+  - **Server host key**: `rsa-sha2-512`, `rsa-sha2-256` (RFC 8332)
+  - **Cipher**: `aes128-gcm@openssh.com`, `aes256-gcm@openssh.com`
+  - **HMAC**: `hmac-sha2-256-etm@openssh.com`, `hmac-sha2-512-etm@openssh.com`, `hmac-sha1-etm@openssh.com`
+  - Backward-compatible — legacy algorithms preserved at lower preference, older servers (CentOS 7, Debian 10) keep working. Thanks [@YoungHong1992](https://github.com/YoungHong1992).
 
 ### v3.4.0 - Windows OpenSSH support + shell-agnostic session sync (May 7, 2026)
 
