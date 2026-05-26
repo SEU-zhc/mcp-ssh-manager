@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 [![npm version](https://img.shields.io/npm/v/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
 [![npm downloads](https://img.shields.io/npm/dt/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
-[![Version](https://img.shields.io/badge/Version-3.5.0-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.5.0)
+[![Version](https://img.shields.io/badge/Version-3.5.1-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.5.1)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-5A67D8?style=for-the-badge&logo=anthropic)](https://claude.ai/code)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-Compatible-00A67E?style=for-the-badge&logo=openai)](https://openai.com/codex)
 [![MCP](https://img.shields.io/badge/MCP-Server-orange?style=for-the-badge)](https://modelcontextprotocol.io)
@@ -20,9 +20,22 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 ---
 
-## 🎉 What's New in v3.5.0
+## 🎉 What's New in v3.5.1
 
-**Per-server security modes — `readonly` / `restricted` + audit log** (Released: May 18, 2026)
+**Robust SSH ping health-check on Windows/OpenSSH** (Released: May 26, 2026)
+
+- **🪟 Healthy Windows sessions are no longer reported as `Dead`** ([#39](https://github.com/bvisible/mcp-ssh-manager/pull/39) — thanks [@username77](https://github.com/username77))
+  - `ssh_connection_status` ran `echo "ping"` and compared the output with a strict `=== 'ping'`. On `cmd.exe` the surrounding quotes are echoed literally (output `"ping"`), so the check failed and a live pooled connection was torn down and rebuilt for nothing.
+  - The probe now runs `echo ping` (no quotes) — a bare `ping` across bash, `cmd.exe` and PowerShell — fixing the root cause rather than only the symptom.
+  - Output parsing moved to an exported, null-safe `isPingAlive(stdout)` helper (CRLF / quote / case-normalized). `includes('ping')` is intentional: a liveness probe should err toward "alive". New `tests/test-ssh-ping.js` is wired into `npm test`. Validated against a real Windows/OpenSSH host.
+
+[Read full changelog →](CHANGELOG.md#351---2026-05-26)
+
+---
+
+## Previous Releases
+
+### v3.5.0 - Per-server security modes — `readonly` / `restricted` + audit log (May 18, 2026)
 
 A second authorization layer that filters tool invocations **inside the MCP server**, complementing the existing client-side `autoApprove`. Useful when sharing the MCP with a third-party agent, a CI bot, or any client where `ssh_execute` shouldn't be unconditionally trusted.
 
@@ -32,13 +45,7 @@ A second authorization layer that filters tool invocations **inside the MCP serv
   - **`restricted`** — every command must match at least one `ALLOW_PATTERNS` regex AND no `DENY_PATTERNS` regex. **DENY wins**. With no `ALLOW_PATTERNS` everything is refused (fail-closed).
 - **📝 Audit log** — opt-in JSONL per server (`SSH_SERVER_<N>_AUDIT_LOG=/path/to/audit.jsonl`). Records `ts`, `server`, `tool`, args, `allowed`, `reason` on denial, `exitCode`/`success` on execution. Sensitive arg fields (`password`, `passphrase`, `sudoPassword`, `token`, `secret`, `apikey`) are replaced with `***`.
 - **🪄 Command aliases expanded BEFORE policy evaluation** — a `DENY` pattern can't be bypassed via an alias.
-- **♻️ Backward-compatible by design** — a v3.4.x `.env` or TOML loads identically. No `MODE` field → zero behavior change. The interactive wizard (`ssh-manager server add`) defaults all three new prompts to skip. All 13 pre-existing tests pass unmodified. New `tests/test-policy.js` adds 26 tests covering modes, DENY > ALLOW precedence, invalid-regex handling, redaction, and the backward-compat fast path.
-
-[Full reference →](docs/SECURITY_MODES.md) · [Read full changelog →](CHANGELOG.md#350---2026-05-18)
-
----
-
-## Previous Releases
+- **♻️ Backward-compatible by design** — a v3.4.x `.env` or TOML loads identically. No `MODE` field → zero behavior change. The interactive wizard (`ssh-manager server add`) defaults all three new prompts to skip. All 13 pre-existing tests pass unmodified. New `tests/test-policy.js` adds 26 tests covering modes, DENY > ALLOW precedence, invalid-regex handling, redaction, and the backward-compat fast path. [Full reference →](docs/SECURITY_MODES.md)
 
 ### v3.4.1 - Modern OpenSSH 9.x compatibility (May 16, 2026)
 

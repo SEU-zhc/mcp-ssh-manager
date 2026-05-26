@@ -5,6 +5,16 @@ All notable changes to MCP SSH Manager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.1] - 2026-05-26
+
+### Fixed
+
+- **Healthy Windows/OpenSSH sessions wrongly reported as `Dead`** ([#39](https://github.com/bvisible/mcp-ssh-manager/pull/39) — thanks @username77)
+  - `ssh_connection_status` ran `echo "ping"` and compared the output with a strict `=== 'ping'`. On `cmd.exe` the surrounding quotes are echoed literally (output `"ping"`), so the check failed and a live pooled connection was torn down and rebuilt for nothing.
+  - The probe now runs `echo ping` (no quotes), which emits a bare `ping` consistently across bash, `cmd.exe` and PowerShell — fixing the root cause rather than only the symptom.
+  - Output parsing moved to a new exported helper `isPingAlive(stdout)` that normalizes CRLF, stray quotes/backslashes and case before matching, and is null/undefined-safe. `includes('ping')` (rather than strict equality) is intentional: a liveness probe should err toward "alive" — a false positive just lets the next real command reconnect, whereas a false negative needlessly drops a healthy connection.
+  - **New test suite** `tests/test-ssh-ping.js` (wired into `npm test` as `test:ping`) covering the quoted/escaped/CRLF/case variants and the null/undefined paths. Validated against a real Windows/OpenSSH host.
+
 ## [3.5.0] - 2026-05-18
 
 ### Added
