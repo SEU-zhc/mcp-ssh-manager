@@ -562,8 +562,12 @@ export function monitorTunnels() {
   }
 }
 
-// Monitor tunnels periodically
-setInterval(monitorTunnels, 30 * 1000); // Every 30 seconds
+// Monitor tunnels periodically.
+// unref() so this interval never keeps the process alive on its own: as part of
+// a stdio MCP server we must exit when the transport closes, not stay pinned by
+// a background timer.
+const tunnelMonitor = setInterval(monitorTunnels, 30 * 1000); // Every 30 seconds
+if (typeof tunnelMonitor.unref === 'function') tunnelMonitor.unref();
 
 export default {
   createTunnel,

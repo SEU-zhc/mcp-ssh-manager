@@ -393,13 +393,16 @@ export function cleanupSessions(maxAge = 30 * 60 * 1000) { // 30 minutes default
   return cleanedCount;
 }
 
-// Periodic cleanup of inactive sessions
-setInterval(() => {
+// Periodic cleanup of inactive sessions.
+// unref() so this interval never keeps the process alive on its own (a stdio MCP
+// server must exit when its transport closes, not be pinned by a background timer).
+const sessionCleanup = setInterval(() => {
   const cleaned = cleanupSessions();
   if (cleaned > 0) {
     logger.info(`Cleaned up ${cleaned} inactive sessions`);
   }
 }, 5 * 60 * 1000); // Every 5 minutes
+if (typeof sessionCleanup.unref === 'function') sessionCleanup.unref();
 
 export default {
   createSession,
