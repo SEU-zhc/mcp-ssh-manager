@@ -5,6 +5,15 @@ All notable changes to MCP SSH Manager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.2] - 2026-06-09
+
+### Changed
+
+- **All 37 tool descriptions rewritten for clarity and agent reliability.** Every MCP tool now documents its real behavior — side effects, destructive vs read-only nature, idempotency, sudo/auth requirements, security-mode gating, and parameter semantics (mutually-exclusive params, defaults, edge cases) — instead of a 4-to-10-word summary. Average description length went from ~6 words to ~70, with no weak outliers (shortest is now 55 words).
+  - Improves real tool-calling: agents now know the consequences before invoking a tool — e.g. that `ssh_db_import` and `ssh_backup_restore` are destructive (DROP/overwrite), that `ssh_db_query` is strictly SELECT-only, that `ssh_upload`/`ssh_sync`/`ssh_deploy` are blocked on `readonly` servers, and which parameters are mutually exclusive.
+  - Also raises the Glama "Tool Definition Quality" score (previously C — average 3.1/5, lowest 2.1/5).
+  - **No behavioral change**: only `description` strings were edited; all logic, parameters, and tool names are unchanged. All test suites pass unmodified.
+
 ## [3.6.1] - 2026-06-09
 
 ### Fixed

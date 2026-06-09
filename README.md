@@ -20,17 +20,23 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 ---
 
-## 🎉 What's New in v3.6.1
+## 🎉 What's New in v3.6.2
 
-**Teardown hygiene follow-up** (Released: June 9, 2026)
+**Richer tool descriptions — better AI tool-calling** (Released: June 9, 2026)
 
-- **🔌 Module-level timers no longer pin the event loop** (follow-up to [#41](https://github.com/bvisible/mcp-ssh-manager/pull/41)) — `tunnel-manager.js` (`monitorTunnels`, 30 s) and `session-manager.js` (session cleanup, 5 min) registered module-level `setInterval`s that were never `unref()`'d, so importing either module kept Node's event loop alive on its own. Both are now `unref()`'d, matching the timers fixed in #41. Already covered by #41's forced-exit for the orphan bug — this restores clean teardown so process lifetime tracks the stdio transport. `npm test` (incl. `test:lifecycle`) stays green.
+- **📝 All 37 tool descriptions rewritten** — every MCP tool now states its real behavior: side effects, destructive vs read-only nature, idempotency, sudo/auth needs, security-mode gating, and parameter semantics (mutually-exclusive params, defaults, edge cases). Average description length went from ~6 words to ~70, with no weak outliers.
+  - Agents now know the consequences **before** calling a tool — e.g. `ssh_db_import` and `ssh_backup_restore` are destructive, `ssh_db_query` is SELECT-only, and `ssh_upload`/`ssh_deploy` are blocked on `readonly` servers.
+  - **No behavioral change** — only `description` strings changed; logic, parameters, and tool names are identical. All tests pass unmodified.
 
-[Read full changelog →](CHANGELOG.md#361---2026-06-09)
+[Read full changelog →](CHANGELOG.md#362---2026-06-09)
 
 ---
 
 ## Previous Releases
+
+### v3.6.1 - Teardown hygiene follow-up (June 9, 2026)
+
+- **🔌 Module-level timers no longer pin the event loop** (follow-up to [#41](https://github.com/bvisible/mcp-ssh-manager/pull/41)) — `tunnel-manager.js` and `session-manager.js` registered module-level `setInterval`s that were never `unref()`'d, so importing either module kept Node's event loop alive. Both are now `unref()`'d. [Full changelog →](CHANGELOG.md#361---2026-06-09)
 
 ### v3.6.0 - Live config hot reload + stdio lifecycle fix (June 9, 2026)
 
