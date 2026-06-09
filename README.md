@@ -20,20 +20,22 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 ---
 
-## 🎉 What's New in v3.6.0
+## 🎉 What's New in v3.6.1
 
-**Live config hot reload + stdio lifecycle fix (no more orphaned processes)** (Released: June 9, 2026)
+**Teardown hygiene follow-up** (Released: June 9, 2026)
 
-- **♻️ Configuration hot reload** ([#40](https://github.com/bvisible/mcp-ssh-manager/pull/40) — thanks [@EnjoySR](https://github.com/EnjoySR))
-  - Add or edit a server in your `.env`/TOML and the running MCP server picks it up on the next call — `ssh_list_servers` sees it **without a restart**. A new `ServerConfigManager` reloads **lazily** when a file's signature (path + `mtime` + size) changes; if a reload fails (malformed mid-edit), the last known-good config is kept. Real `process.env` vars keep top priority. No watcher, no polling.
-- **🔌 No more orphaned stdio processes** ([#41](https://github.com/bvisible/mcp-ssh-manager/pull/41) — thanks [@LegendaryGatz](https://github.com/LegendaryGatz))
-  - A stdio MCP server is torn down by stdin EOF / SIGTERM, not SIGINT. With only a `SIGINT` handler, every session leaked a ~83 MB node process (reparented to init). Shutdown is now idempotent across `SIGINT`/`SIGTERM`/`SIGHUP`/stdin-close, keepalive & cleanup timers are `unref()`'d, and the process exits cleanly **~10 ms** after teardown instead of never.
+- **🔌 Module-level timers no longer pin the event loop** (follow-up to [#41](https://github.com/bvisible/mcp-ssh-manager/pull/41)) — `tunnel-manager.js` (`monitorTunnels`, 30 s) and `session-manager.js` (session cleanup, 5 min) registered module-level `setInterval`s that were never `unref()`'d, so importing either module kept Node's event loop alive on its own. Both are now `unref()`'d, matching the timers fixed in #41. Already covered by #41's forced-exit for the orphan bug — this restores clean teardown so process lifetime tracks the stdio transport. `npm test` (incl. `test:lifecycle`) stays green.
 
-[Read full changelog →](CHANGELOG.md#360---2026-06-09)
+[Read full changelog →](CHANGELOG.md#361---2026-06-09)
 
 ---
 
 ## Previous Releases
+
+### v3.6.0 - Live config hot reload + stdio lifecycle fix (June 9, 2026)
+
+- **♻️ Configuration hot reload** ([#40](https://github.com/bvisible/mcp-ssh-manager/pull/40) — thanks [@EnjoySR](https://github.com/EnjoySR)) — add or edit a server in your `.env`/TOML and the running MCP server picks it up on the next call, no restart. A `ServerConfigManager` reloads lazily on file-signature change (path + `mtime` + size); a failed reload keeps the last known-good config; real `process.env` vars keep top priority. No watcher, no polling.
+- **🔌 No more orphaned stdio processes** ([#41](https://github.com/bvisible/mcp-ssh-manager/pull/41) — thanks [@LegendaryGatz](https://github.com/LegendaryGatz)) — a stdio MCP server is torn down by stdin EOF / SIGTERM, not SIGINT; with only a `SIGINT` handler every session leaked a ~83 MB node process. Shutdown is now idempotent across `SIGINT`/`SIGTERM`/`SIGHUP`/stdin-close, timers are `unref()`'d, and the process exits **~10 ms** after teardown instead of never. [Full changelog →](CHANGELOG.md#360---2026-06-09)
 
 ### v3.5.1 - Robust SSH ping health-check on Windows/OpenSSH (May 26, 2026)
 
@@ -1028,12 +1030,6 @@ Made with ❤️ for the Claude Code community
 
 <a href="https://glama.ai/mcp/servers/@bvisible/mcp-ssh-manager">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@bvisible/mcp-ssh-manager/badge" alt="SSH Manager MCP server" />
-</a>
-
-<br/>
-
-<a href="https://mseep.ai/app/bvisible-mcp-ssh-manager">
-  <img src="https://mseep.net/pr/bvisible-mcp-ssh-manager-badge.png" alt="MseeP.ai Security Assessment Badge" />
 </a>
 
 </div>

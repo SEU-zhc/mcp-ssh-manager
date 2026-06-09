@@ -5,6 +5,15 @@ All notable changes to MCP SSH Manager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.1] - 2026-06-09
+
+### Fixed
+
+- **Module-level monitor/cleanup intervals pinned the Node event loop** (follow-up to [#41](https://github.com/bvisible/mcp-ssh-manager/pull/41))
+  - `tunnel-manager.js` (`monitorTunnels`, every 30 s) and `session-manager.js` (inactive-session cleanup, every 5 min) registered module-level `setInterval` timers that were never `unref()`'d, so importing either module kept the event loop alive on its own.
+  - Both are now `unref()`'d, matching the keepalive and cleanup timers fixed in #41. The forced-exit added in #41 already made these harmless for the orphan-process bug; this restores proper teardown hygiene so process lifetime tracks the stdio transport, not a background timer.
+  - Verified: before, importing either module never exits on its own; after, both exit naturally. Full `npm test` (including `test:lifecycle`) stays green.
+
 ## [3.6.0] - 2026-06-09
 
 ### Added
