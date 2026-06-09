@@ -20,20 +20,24 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 ---
 
-## 🎉 What's New in v3.5.1
+## 🎉 What's New in v3.6.0
 
-**Robust SSH ping health-check on Windows/OpenSSH** (Released: May 26, 2026)
+**Live config hot reload + stdio lifecycle fix (no more orphaned processes)** (Released: June 9, 2026)
 
-- **🪟 Healthy Windows sessions are no longer reported as `Dead`** ([#39](https://github.com/bvisible/mcp-ssh-manager/pull/39) — thanks [@username77](https://github.com/username77))
-  - `ssh_connection_status` ran `echo "ping"` and compared the output with a strict `=== 'ping'`. On `cmd.exe` the surrounding quotes are echoed literally (output `"ping"`), so the check failed and a live pooled connection was torn down and rebuilt for nothing.
-  - The probe now runs `echo ping` (no quotes) — a bare `ping` across bash, `cmd.exe` and PowerShell — fixing the root cause rather than only the symptom.
-  - Output parsing moved to an exported, null-safe `isPingAlive(stdout)` helper (CRLF / quote / case-normalized). `includes('ping')` is intentional: a liveness probe should err toward "alive". New `tests/test-ssh-ping.js` is wired into `npm test`. Validated against a real Windows/OpenSSH host.
+- **♻️ Configuration hot reload** ([#40](https://github.com/bvisible/mcp-ssh-manager/pull/40) — thanks [@EnjoySR](https://github.com/EnjoySR))
+  - Add or edit a server in your `.env`/TOML and the running MCP server picks it up on the next call — `ssh_list_servers` sees it **without a restart**. A new `ServerConfigManager` reloads **lazily** when a file's signature (path + `mtime` + size) changes; if a reload fails (malformed mid-edit), the last known-good config is kept. Real `process.env` vars keep top priority. No watcher, no polling.
+- **🔌 No more orphaned stdio processes** ([#41](https://github.com/bvisible/mcp-ssh-manager/pull/41) — thanks [@LegendaryGatz](https://github.com/LegendaryGatz))
+  - A stdio MCP server is torn down by stdin EOF / SIGTERM, not SIGINT. With only a `SIGINT` handler, every session leaked a ~83 MB node process (reparented to init). Shutdown is now idempotent across `SIGINT`/`SIGTERM`/`SIGHUP`/stdin-close, keepalive & cleanup timers are `unref()`'d, and the process exits cleanly **~10 ms** after teardown instead of never.
 
-[Read full changelog →](CHANGELOG.md#351---2026-05-26)
+[Read full changelog →](CHANGELOG.md#360---2026-06-09)
 
 ---
 
 ## Previous Releases
+
+### v3.5.1 - Robust SSH ping health-check on Windows/OpenSSH (May 26, 2026)
+
+- **🪟 Healthy Windows sessions no longer reported as `Dead`** ([#39](https://github.com/bvisible/mcp-ssh-manager/pull/39) — thanks [@username77](https://github.com/username77)) — the liveness probe ran `echo "ping"` and `cmd.exe` echoed the quotes literally, failing a strict `=== 'ping'` check and needlessly rebuilding live connections. Now uses `echo ping` parsed by a null-safe `isPingAlive(stdout)` helper (CRLF/quote/case-normalized), covered by `tests/test-ssh-ping.js`. [Full changelog →](CHANGELOG.md#351---2026-05-26)
 
 ### v3.5.0 - Per-server security modes — `readonly` / `restricted` + audit log (May 18, 2026)
 

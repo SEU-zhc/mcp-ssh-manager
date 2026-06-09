@@ -5,6 +5,34 @@ All notable changes to MCP SSH Manager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.0] - 2026-06-09
+
+### Added
+
+- **Live configuration hot reload** ([#40](https://github.com/bvisible/mcp-ssh-manager/pull/40) — thanks [@EnjoySR](https://github.com/EnjoySR))
+  - The MCP server now reloads its server configuration when the `.env` or TOML file changes on disk, so tools like `ssh_list_servers` see newly added or edited servers **without restarting the MCP process**.
+  - A new `ServerConfigManager` tracks a lightweight signature (path + `mtime` + size) of both config files and reloads **lazily** — only when that signature changes, on the next config access. No file watcher, no polling thread, no background timer.
+  - **Fail-safe:** if a reload throws (e.g. a malformed file caught mid-edit), the last known-good configuration is kept in memory and the error is logged — the server never ends up with an empty or broken config.
+  - `.env` parsing no longer permanently mutates `process.env` (`dotenv` is now read with `processEnv: {}`), and real process environment variables keep the **highest priority** over file values, matching the documented loading order.
+
+### Fixed
+
+- **stdio server orphaned on session teardown — one leaked node process per session** ([#41](https://github.com/bvisible/mcp-ssh-manager/pull/41) — thanks [@LegendaryGatz](https://github.com/LegendaryGatz))
+  - A stdio MCP server is torn down by its host closing **stdin (EOF)** and/or sending **SIGTERM** — not `SIGINT`, which only arrives on an interactive Ctrl-C. The only shutdown handler was `SIGINT`, so on normal teardown the process was never signalled, got reparented to init, and leaked (~83 MB plus live keepalive timers each, accumulating one process per session).
+  - Shutdown is now an **idempotent** `shutdown(reason)` registered on `SIGINT`, `SIGTERM`, `SIGHUP` and stdin `'end'`/`'close'`. The per-connection keepalive interval and the 10-minute cleanup interval are `unref()`'d so process lifetime tracks the transport, not a timer. `ssh.dispose()` is wrapped in try/catch so one bad connection can't block the rest, and a short `unref`'d timer forces exit so teardown can never hang if the host has already stopped reading.
+  - Measured: exits cleanly **~10 ms** after stdin EOF, versus staying alive indefinitely before.
+
+### Tests
+
+- **New `tests/test-lifecycle.js`** (wired into `npm test` as `test:lifecycle`) — black-box teardown coverage asserting a clean exit on stdin EOF, SIGTERM, SIGINT and overlapping signals. Regression guard for the orphan-process bug.
+- **`tests/test-server-config-manager.js` extended to 9 checks** — laziness (no reload while files are unchanged, exactly one reload after a change), reload-failure-keeps-last-valid-config plus recovery, and deleted-file robustness, in addition to the original TOML/`.env` hot-reload paths.
+
+### Backward compatibility
+
+- **Zero impact on existing setups.** Hot reload is transparent — if your config files don't change, behavior is identical to v3.5.x. No new config field, no new prompt, no new file is ever created.
+- The lifecycle fix is pure teardown hygiene: no change to any tool's behavior or output.
+- All pre-existing test suites pass unmodified.
+
 ## [3.5.1] - 2026-05-26
 
 ### Fixed
