@@ -973,10 +973,8 @@ registerToolConditional(
         rsyncOptions.push('--dry-run');
       }
 
-      if (verbose || logger.verbose) {
-        // Only add stats, not progress to avoid blocking with too much output
-        rsyncOptions.push('--stats');
-      }
+      // Always include --stats so we can parse transfer counts
+      rsyncOptions.push('--stats');
 
       // Add exclude patterns
       exclude.forEach(pattern => {
@@ -1161,9 +1159,11 @@ registerToolConditional(
           };
 
           // Extract statistics from rsync output
-          const filesMatch = output.match(/Number of files transferred: (\d+)/);
-          const sizeMatch = output.match(/Total transferred file size: ([\d,]+) bytes/);
-          const speedMatch = output.match(/([\d.]+) bytes\/sec/);
+          // rsync 2.x: "Number of files transferred: N"
+          // rsync 3.x: "Number of regular files transferred: N"
+          const filesMatch = output.match(/Number of (?:regular )?files transferred: (\d+)/);
+          const sizeMatch = output.match(/Total transferred file size: ([\d,.]+) bytes/);
+          const speedMatch = output.match(/([\d,.]+) bytes\/sec/);
 
           if (filesMatch) stats.filesTransferred = parseInt(filesMatch[1]);
           if (sizeMatch) stats.totalSize = parseInt(sizeMatch[1].replace(/,/g, ''));
