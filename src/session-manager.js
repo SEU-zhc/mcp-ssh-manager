@@ -14,7 +14,7 @@ function generateMarker(prefix) {
 }
 
 // Session states
-export const SESSION_STATES = {
+const SESSION_STATES = {
   INITIALIZING: 'initializing',
   READY: 'ready',
   BUSY: 'busy',
@@ -332,7 +332,7 @@ export function getSession(sessionId) {
 export function listSessions() {
   const activeSessions = [];
 
-  for (const [id, session] of sessions.entries()) {
+  for (const [, session] of sessions.entries()) {
     if (session.state !== SESSION_STATES.CLOSED) {
       activeSessions.push(session.getInfo());
     }
@@ -356,25 +356,9 @@ export function closeSession(sessionId) {
 }
 
 /**
- * Close all sessions for a server
- */
-export function closeServerSessions(serverName) {
-  let closedCount = 0;
-
-  for (const [id, session] of sessions.entries()) {
-    if (session.serverName === serverName) {
-      session.close();
-      closedCount++;
-    }
-  }
-
-  return closedCount;
-}
-
-/**
  * Cleanup old sessions
  */
-export function cleanupSessions(maxAge = 30 * 60 * 1000) { // 30 minutes default
+function cleanupSessions(maxAge = 30 * 60 * 1000) { // 30 minutes default
   const now = Date.now();
   let cleanedCount = 0;
 
@@ -403,13 +387,3 @@ const sessionCleanup = setInterval(() => {
   }
 }, 5 * 60 * 1000); // Every 5 minutes
 if (typeof sessionCleanup.unref === 'function') sessionCleanup.unref();
-
-export default {
-  createSession,
-  getSession,
-  listSessions,
-  closeSession,
-  closeServerSessions,
-  cleanupSessions,
-  SESSION_STATES
-};

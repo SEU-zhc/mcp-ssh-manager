@@ -1,7 +1,7 @@
 // Configuration constants for MCP SSH Manager
 
 // Output limits to prevent Claude Code crashes
-export const OUTPUT_LIMITS = {
+const OUTPUT_LIMITS = {
   // Maximum length of stdout/stderr in responses (characters)
   MAX_OUTPUT_LENGTH: process.env.MCP_SSH_MAX_OUTPUT_LENGTH
     ? parseInt(process.env.MCP_SSH_MAX_OUTPUT_LENGTH)
@@ -42,7 +42,7 @@ export const TIMEOUTS = {
 };
 
 // Response formatting
-export const RESPONSE_FORMAT = {
+const RESPONSE_FORMAT = {
   // Whether to use compact JSON (no formatting)
   COMPACT_JSON: process.env.MCP_SSH_COMPACT_JSON === 'true',
 
