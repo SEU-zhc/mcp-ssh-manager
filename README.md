@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 [![npm version](https://img.shields.io/npm/v/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
 [![npm downloads](https://img.shields.io/npm/dt/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
-[![Version](https://img.shields.io/badge/Version-3.6.3-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.6.3)
+[![Version](https://img.shields.io/badge/Version-3.6.4-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.6.4)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-5A67D8?style=for-the-badge&logo=anthropic)](https://claude.ai/code)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-Compatible-00A67E?style=for-the-badge&logo=openai)](https://openai.com/codex)
 [![MCP](https://img.shields.io/badge/MCP-Server-orange?style=for-the-badge)](https://modelcontextprotocol.io)
@@ -20,18 +20,22 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 ---
 
-## 🎉 What's New in v3.6.3
+## 🎉 What's New in v3.6.4
 
-**`ssh_sync` now reports the real transfer count** (Released: June 18, 2026)
+**Internal cleanup + a dead-code quality gate** (Released: June 18, 2026)
 
-- **📊 No more false "No files needed to be transferred"** ([#42](https://github.com/bvisible/mcp-ssh-manager/pull/42) — thanks [@MakksSh](https://github.com/MakksSh)) — `ssh_sync` scraped rsync's `--stats` block incorrectly: stats were only requested in `verbose` mode and the regex only matched rsync 2.x wording, so `filesTransferred` stayed `0` and agents kept re-verifying or retrying a sync that had actually succeeded. Now `--stats` is always passed and both rsync 2.x and 3.x output is parsed.
-- **🍏 Correct on macOS and in any locale** — openrsync (the default `/usr/bin/rsync` on recent macOS) writes byte counts as `B`, not `bytes`, and locale-formatted numbers use `,`/`.` as thousands separators; both are handled now. Parsing was extracted to `src/rsync-stats.js` and covered by 46 new assertions in `tests/test-sync-stats.js`.
+- **🧹 Dead-code removal (−343 lines), zero behavioral change** — removed 27 unused exports and 2 duplicate exports. The MCP server and CLI behave identically: command builders/parsers are byte-identical before/after, and all 37 tools were verified end-to-end against a live SSH server.
+- **🛡️ Dead-code CI gate** — a calibrated `knip.json` plus a **blocking** `knip` step in CI keep unused code and dependencies from creeping back. `eslint src/` is now clean (0 errors, 0 warnings).
 
-[Read full changelog →](CHANGELOG.md#363---2026-06-18)
+[Read full changelog →](CHANGELOG.md#364---2026-06-18)
 
 ---
 
 ## Previous Releases
+
+### v3.6.3 - `ssh_sync` reports the real transfer count (June 18, 2026)
+
+- **📊 No more false "No files needed to be transferred"** ([#42](https://github.com/bvisible/mcp-ssh-manager/pull/42) — thanks [@MakksSh](https://github.com/MakksSh)) — fixed rsync `--stats` parsing: `--stats` is always passed now, and rsync 2.x/3.x wording, openrsync's `B` suffix, and locale separators are all handled. [Full changelog →](CHANGELOG.md#363---2026-06-18)
 
 ### v3.6.2 - Richer tool descriptions (June 9, 2026)
 

@@ -33,7 +33,7 @@ jobs:
     - name: Install Node dependencies
       run: |
         npm install
-        npm install --save-dev eslint prettier knip@5
+        npm install --save-dev eslint prettier
     
     - name: Run JavaScript syntax check
       run: |

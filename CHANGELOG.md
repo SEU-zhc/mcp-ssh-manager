@@ -5,6 +5,16 @@ All notable changes to MCP SSH Manager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.4] - 2026-06-18
+
+### Changed
+
+- **Internal dead-code cleanup — no behavioral change.** Removed 27 unused exports and 2 duplicate exports across the codebase (−343 lines): fully-unused helper functions deleted, internally-used symbols un-exported, and redundant `export default`s removed. The public surface (the MCP server + CLI) is unchanged — command builders and parsers are byte-identical before/after (verified by a differential test of `main` vs the change), and all 37 tools were exercised end-to-end against a live SSH server (Ubuntu + MariaDB) with no regression.
+
+### Tooling
+
+- **Dead-code quality gate.** Added a calibrated `knip.json` and a **blocking** `knip` step to the `quality` CI workflow, so unused exports/files/dependencies now fail the build and can't creep back in. `eslint src/` is clean (0 errors, 0 warnings).
+
 ## [3.6.3] - 2026-06-18
 
 ### Fixed
