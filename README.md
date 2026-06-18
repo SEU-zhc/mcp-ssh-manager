@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 [![npm version](https://img.shields.io/npm/v/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
 [![npm downloads](https://img.shields.io/npm/dt/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
-[![Version](https://img.shields.io/badge/Version-3.5.1-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.5.1)
+[![Version](https://img.shields.io/badge/Version-3.6.3-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.6.3)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-5A67D8?style=for-the-badge&logo=anthropic)](https://claude.ai/code)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-Compatible-00A67E?style=for-the-badge&logo=openai)](https://openai.com/codex)
 [![MCP](https://img.shields.io/badge/MCP-Server-orange?style=for-the-badge)](https://modelcontextprotocol.io)
@@ -20,19 +20,22 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 ---
 
-## 🎉 What's New in v3.6.2
+## 🎉 What's New in v3.6.3
 
-**Richer tool descriptions — better AI tool-calling** (Released: June 9, 2026)
+**`ssh_sync` now reports the real transfer count** (Released: June 18, 2026)
 
-- **📝 All 37 tool descriptions rewritten** — every MCP tool now states its real behavior: side effects, destructive vs read-only nature, idempotency, sudo/auth needs, security-mode gating, and parameter semantics (mutually-exclusive params, defaults, edge cases). Average description length went from ~6 words to ~70, with no weak outliers.
-  - Agents now know the consequences **before** calling a tool — e.g. `ssh_db_import` and `ssh_backup_restore` are destructive, `ssh_db_query` is SELECT-only, and `ssh_upload`/`ssh_deploy` are blocked on `readonly` servers.
-  - **No behavioral change** — only `description` strings changed; logic, parameters, and tool names are identical. All tests pass unmodified.
+- **📊 No more false "No files needed to be transferred"** ([#42](https://github.com/bvisible/mcp-ssh-manager/pull/42) — thanks [@MakksSh](https://github.com/MakksSh)) — `ssh_sync` scraped rsync's `--stats` block incorrectly: stats were only requested in `verbose` mode and the regex only matched rsync 2.x wording, so `filesTransferred` stayed `0` and agents kept re-verifying or retrying a sync that had actually succeeded. Now `--stats` is always passed and both rsync 2.x and 3.x output is parsed.
+- **🍏 Correct on macOS and in any locale** — openrsync (the default `/usr/bin/rsync` on recent macOS) writes byte counts as `B`, not `bytes`, and locale-formatted numbers use `,`/`.` as thousands separators; both are handled now. Parsing was extracted to `src/rsync-stats.js` and covered by 46 new assertions in `tests/test-sync-stats.js`.
 
-[Read full changelog →](CHANGELOG.md#362---2026-06-09)
+[Read full changelog →](CHANGELOG.md#363---2026-06-18)
 
 ---
 
 ## Previous Releases
+
+### v3.6.2 - Richer tool descriptions (June 9, 2026)
+
+- **📝 All 37 tool descriptions rewritten** — every MCP tool now documents its real behavior (side effects, destructive vs read-only nature, idempotency, sudo/auth requirements, security-mode gating, parameter semantics) instead of a 4-to-10-word summary. Agents now know the consequences before invoking a tool; no behavioral change — only `description` strings changed. [Full changelog →](CHANGELOG.md#362---2026-06-09)
 
 ### v3.6.1 - Teardown hygiene follow-up (June 9, 2026)
 

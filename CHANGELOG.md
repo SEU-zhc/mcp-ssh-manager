@@ -5,6 +5,22 @@ All notable changes to MCP SSH Manager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.3] - 2026-06-18
+
+### Fixed
+
+- **`ssh_sync` falsely reported "No files needed to be transferred" even when files were synced** ([#42](https://github.com/bvisible/mcp-ssh-manager/pull/42) — thanks [@MakksSh](https://github.com/MakksSh))
+  - Two bugs in the rsync `--stats` scraper kept `filesTransferred` at `0`: `--stats` was only passed when `verbose` was enabled (so rsync produced no statistics lines at all), and the count regex only matched rsync 2.x wording (`Number of files transferred`) while rsync 3.x — standard on modern distros — emits `Number of regular files transferred`. Agents would mistrust the result, run redundant checks, or retry the sync.
+  - `--stats` is now always passed, and the count regex matches both rsync 2.x and 3.x.
+- **`totalSize` stayed `0` on macOS, and locale-formatted numbers were mis-parsed** (follow-up hardening)
+  - openrsync (the default `/usr/bin/rsync` on recent macOS) suffixes byte counts with `B`, not `bytes`, so the size regex never matched. Both suffixes are now accepted — openrsync keeps raw byte counts even for large files (verified at 5 MB), so no `K/M/G` handling is needed.
+  - Numbers grouped with locale-specific separators (`,` or `.` for thousands, the opposite char for the decimal) are now parsed correctly for the file count, transferred size, and speed, instead of only stripping commas.
+  - The `--stats` parsing was extracted into `src/rsync-stats.js` so it is unit-testable without booting the MCP server.
+
+### Tests
+
+- **New `tests/test-sync-stats.js`** (wired into `npm test` as `test:sync`) — 46 assertions covering openrsync output captured from a live macOS run, GNU rsync 3.x/2.x, US/EU locale number formats, the zero-files case, and a missing `--stats` block.
+
 ## [3.6.2] - 2026-06-09
 
 ### Changed
