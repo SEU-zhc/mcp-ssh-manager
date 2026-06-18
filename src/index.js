@@ -47,6 +47,7 @@ import {
   getActiveProfileName
 } from './profile-loader.js';
 import { logger } from './logger.js';
+import { parseRsyncStats } from './rsync-stats.js';
 import {
   createSession,
   getSession,
@@ -1151,23 +1152,9 @@ registerToolConditional(
             return;
           }
 
-          // Parse rsync output for statistics
-          let stats = {
-            filesTransferred: 0,
-            totalSize: 0,
-            totalTime: duration
-          };
-
-          // Extract statistics from rsync output
-          // rsync 2.x: "Number of files transferred: N"
-          // rsync 3.x: "Number of regular files transferred: N"
-          const filesMatch = output.match(/Number of (?:regular )?files transferred: (\d+)/);
-          const sizeMatch = output.match(/Total transferred file size: ([\d,.]+) bytes/);
-          const speedMatch = output.match(/([\d,.]+) bytes\/sec/);
-
-          if (filesMatch) stats.filesTransferred = parseInt(filesMatch[1]);
-          if (sizeMatch) stats.totalSize = parseInt(sizeMatch[1].replace(/,/g, ''));
-          if (speedMatch) stats.speed = parseFloat(speedMatch[1]);
+          // Parse rsync output for statistics. Handles rsync 2.x/3.x wording,
+          // GNU "bytes" vs openrsync "B" suffixes, and locale separators.
+          const stats = parseRsyncStats(output, duration);
 
           logger.info(`Rsync ${direction} completed`, {
             server: serverName,
