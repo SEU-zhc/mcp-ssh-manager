@@ -340,6 +340,41 @@ export function buildMongoDBListCollectionsCommand(options) {
 }
 
 /**
+ * Build a single-quoted shell heredoc that carries `body` to a command's stdin.
+ *
+ * The delimiter is single-quoted (`<<'DELIM'`) so the remote shell takes the body
+ * literally — backticks, `$VAR`, and `$(...)` inside `body` are never expanded by the
+ * shell. This is how SQL/JS query text is delivered to mysql/psql/mongo without the
+ * shell parsing it first (the cause of issue #44: corruption of backtick-quoted
+ * identifiers and remote command injection).
+ *
+ * When the command pipes its stdout onward (e.g. `mysql ... | awk ...`), the pipe must
+ * stay on the heredoc's opening line — the terminator has to be alone on its own line —
+ * so the pipeline is passed via `options.pipeline` and emitted as `<<'DELIM' | awk ...`.
+ *
+ * @param body Text fed to the command's stdin (e.g. a SQL statement). Passed verbatim.
+ * @param options.delimiter Heredoc terminator. Must not appear as a standalone line in
+ *   `body`, otherwise the heredoc would end early; this is rejected defensively.
+ * @param options.pipeline Shell pipeline appended after the heredoc marker on the
+ *   opening line (e.g. `"| awk '...'"`). Omit for a plain stdin redirect.
+ * @returns The redirection fragment to append after a command, ending with the
+ *   terminator on its own line.
+ * @throws {Error} If a line of `body` equals `delimiter`.
+ * @example
+ *   `mysql app${buildHeredoc('SELECT 1')}`
+ *   // mysql app <<'__MCP_SQL_EOF__'\nSELECT 1\n__MCP_SQL_EOF__
+ * @see buildMySQLQueryCommand
+ */
+export function buildHeredoc(body, { delimiter = '__MCP_SQL_EOF__', pipeline = '' } = {}) {
+  const text = body == null ? '' : String(body);
+  if (text.split('\n').some(line => line === delimiter)) {
+    throw new Error(`Query contains the heredoc delimiter "${delimiter}" on its own line`);
+  }
+  const suffix = pipeline ? ` ${pipeline}` : '';
+  return ` <<'${delimiter}'${suffix}\n${text}\n${delimiter}`;
+}
+
+/**
  * Build MySQL query command (SELECT only)
  */
 export function buildMySQLQueryCommand(options) {
@@ -357,11 +392,16 @@ export function buildMySQLQueryCommand(options) {
   if (port) command += ` -P ${port}`;
   command += ` ${database}`;
 
+  // Feed the SQL via stdin (quoted heredoc) so the remote shell never parses it —
+  // backtick-quoted identifiers and `$` survive intact, and query text cannot inject
+  // shell commands. See buildHeredoc and issue #44.
   if (format === 'json') {
-    // Use JSON output if MySQL 5.7.8+
-    command += ` -e "${query}" --batch --skip-column-names | awk 'BEGIN{print "["} {if(NR>1)print ","; printf "{\\"row\\":%d,\\"data\\":\\"%s\\"}", NR, $0} END{print "]"}'`;
+    // Use JSON output if MySQL 5.7.8+. The awk pipe stays on the heredoc opening line so
+    // the terminator remains alone on its own line.
+    const awk = 'awk \'BEGIN{print "["} {if(NR>1)print ","; printf "{\\"row\\":%d,\\"data\\":\\"%s\\"}", NR, $0} END{print "]"}\'';
+    command += ` --batch --skip-column-names${buildHeredoc(query, { pipeline: `| ${awk}` })}`;
   } else {
-    command += ` -e "${query}"`;
+    command += buildHeredoc(query);
   }
 
   return command;
@@ -387,7 +427,9 @@ export function buildPostgreSQLQueryCommand(options) {
   if (host) command += ` -h ${host}`;
   if (port) command += ` -p ${port}`;
   command += ` -d ${database}`;
-  command += ` -c "${query}"`;
+  // Feed SQL via stdin (quoted heredoc) instead of `-c "${query}"` so the remote shell
+  // never parses it. See buildHeredoc and issue #44.
+  command += buildHeredoc(query);
 
   return command;
 }
@@ -404,7 +446,11 @@ export function buildMongoDBQueryCommand(options) {
   if (user) command += ` --username ${user}`;
   if (password) command += ` --password '${password}'`;
   command += ` ${database}`;
-  command += ` --quiet --eval "db.${collection}.find(${query || '{}'}).forEach(printjson)"`;
+  // Feed the JS script via stdin (quoted heredoc) instead of `--eval "..."` so the
+  // remote shell never expands backticks/`$` in the query. mongo still evaluates the
+  // script as JavaScript (expected). See buildHeredoc and issue #44.
+  const script = `db.${collection}.find(${query || '{}'}).forEach(printjson)`;
+  command += ` --quiet${buildHeredoc(script)}`;
 
   return command;
 }
