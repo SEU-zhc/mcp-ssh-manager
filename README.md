@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 [![npm version](https://img.shields.io/npm/v/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
 [![npm downloads](https://img.shields.io/npm/dt/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
-[![Version](https://img.shields.io/badge/Version-3.6.4-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.6.4)
+[![Version](https://img.shields.io/badge/Version-3.6.5-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.6.5)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-5A67D8?style=for-the-badge&logo=anthropic)](https://claude.ai/code)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-Compatible-00A67E?style=for-the-badge&logo=openai)](https://openai.com/codex)
 [![MCP](https://img.shields.io/badge/MCP-Server-orange?style=for-the-badge)](https://modelcontextprotocol.io)
@@ -20,18 +20,22 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 ---
 
-## 🎉 What's New in v3.6.4
+## 🎉 What's New in v3.6.5
 
-**Internal cleanup + a dead-code quality gate** (Released: June 18, 2026)
+**Security fix: `ssh_db_query` shell injection + a row-count fix** (Released: June 30, 2026)
 
-- **🧹 Dead-code removal (−343 lines), zero behavioral change** — removed 27 unused exports and 2 duplicate exports. The MCP server and CLI behave identically: command builders/parsers are byte-identical before/after, and all 37 tools were verified end-to-end against a live SSH server.
-- **🛡️ Dead-code CI gate** — a calibrated `knip.json` plus a **blocking** `knip` step in CI keep unused code and dependencies from creeping back. `eslint src/` is now clean (0 errors, 0 warnings).
+- **🔒 `ssh_db_query` no longer lets the remote shell parse your query** ([#44](https://github.com/bvisible/mcp-ssh-manager/pull/44) — thanks [@technophile77](https://github.com/technophile77)) — the builders interpolated the query into a double-quoted shell string (`mysql -e "${query}"`, `psql -c "${query}"`, `mongo --eval "${query}"`), so the remote shell evaluated backticks and `$(…)` **before** the database saw it. That both **corrupted** backtick identifiers (hyphenated DB names, cross-DB joins → empty results, no error) **and** let the "SELECT-only" tool **run arbitrary shell commands** on the host. The query is now delivered on **stdin via a single-quoted heredoc**, so only the database engine ever interprets it.
+- **🔢 `ssh_db_query` reports the real `row_count`** ([#45](https://github.com/bvisible/mcp-ssh-manager/pull/45) — thanks [@technophile77](https://github.com/technophile77)) — it used to count the cosmetic JSON-wrapper line (1 row → `2`, 0 rows → `2`); it now derives the count from each engine's actual output (MySQL JSON entries, psql's `(N rows)` footer, MongoDB documents).
 
-[Read full changelog →](CHANGELOG.md#364---2026-06-18)
+[Read full changelog →](CHANGELOG.md#365---2026-06-30)
 
 ---
 
 ## Previous Releases
+
+### v3.6.4 - Internal cleanup + a dead-code quality gate (June 18, 2026)
+
+- **🧹 Dead-code removal (−343 lines), zero behavioral change** — removed 27 unused exports and 2 duplicate exports; the MCP server and CLI behave identically (command builders/parsers byte-identical, all 37 tools verified end-to-end). A calibrated `knip.json` plus a **blocking** `knip` CI step keep unused code from creeping back. [Full changelog →](CHANGELOG.md#364---2026-06-18)
 
 ### v3.6.3 - `ssh_sync` reports the real transfer count (June 18, 2026)
 

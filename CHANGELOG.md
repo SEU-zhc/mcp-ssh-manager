@@ -5,6 +5,26 @@ All notable changes to MCP SSH Manager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.5] - 2026-06-30
+
+### Security
+
+- **`ssh_db_query` could execute arbitrary shell commands on the remote host** ([#44](https://github.com/bvisible/mcp-ssh-manager/pull/44) — thanks [@technophile77](https://github.com/technophile77))
+  - The query builders interpolated the raw query into a **double-quoted** shell string (`mysql -e "${query}"`, `psql -c "${query}"`, `mongo --eval "${query}"`), so the remote shell evaluated backticks `` `…` `` and `$(…)`/`$VAR` **before** the database engine ever saw the query. The "SELECT-only" tool could therefore run shell commands on the target server (e.g. `` SELECT `id` `` / `SELECT '$(id)'`).
+  - The query is now delivered to `mysql`/`psql`/`mongo` on **stdin via a single-quoted heredoc** (`<<'__MCP_SQL_EOF__'`), so the remote shell never parses it — only the database engine interprets the SQL/JS. A shared `buildHeredoc()` helper keeps the existing `awk` JSON-wrapper pipe on the heredoc opening line (MySQL JSON output is byte-for-byte unchanged) and defensively rejects a delimiter collision. `isSafeQuery()` is intentionally left as-is, since the heredoc — not keyword filtering — closes the injection path.
+
+### Fixed
+
+- **`ssh_db_query` (MySQL) silently corrupted backtick-quoted identifiers** ([#44](https://github.com/bvisible/mcp-ssh-manager/pull/44) — thanks [@technophile77](https://github.com/technophile77))
+  - The same shell-evaluation bug meant any query using backtick identifiers — hyphenated database names, cross-database joins, reserved-word columns — was rewritten by the shell and returned empty/incorrect results **with no error**. The stdin heredoc fix above restores these queries verbatim.
+- **`ssh_db_query` reported `row_count` off by one** ([#45](https://github.com/bvisible/mcp-ssh-manager/pull/45) — thanks [@technophile77](https://github.com/technophile77))
+  - The handler reported `output.split('\n').length`, which counted cosmetic lines (the leading `[` of the MySQL JSON wrapper, psql header/separator lines) rather than result rows: 1 row → `2`, 13 rows → `14`, 0 rows → `2`. A new `countQueryRows()` derives the count from each engine's actual output structure — MySQL JSON `{"row":N,…}` entries, MySQL `--batch` lines, psql's authoritative `(N rows)` footer (with a header/separator fallback), and MongoDB `printjson` documents — so empty output is `0` and the count tracks real rows.
+
+### Tests
+
+- **New `tests/test-database-query-quoting.js`** (`test:dbquoting`) — verifies the SQL/JS query text is carried verbatim on stdin for all three builders (never via `-e "`/`-c "`/`--eval "`), that the `awk` pipe stays on the heredoc opening line with the terminator alone, that `buildHeredoc` rejects a delimiter collision, and a stochastic round-trip of 500 random shell-metacharacter queries.
+- **New `tests/test-database-row-count.js`** (`test:dbrowcount`) — covers the exact issue cases (MySQL 0/1/13 rows), a look-alike `{"row":` value inside a cell, MySQL text format, psql `(N rows)`/`(1 row)`/`(0 rows)` footers and the no-footer fallback, MongoDB single/multi-document counting, and empty/whitespace → `0`.
+
 ## [3.6.4] - 2026-06-18
 
 ### Changed
