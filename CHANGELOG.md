@@ -5,6 +5,22 @@ All notable changes to MCP SSH Manager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.6] - 2026-07-11
+
+### Fixed
+
+- **Handlers read stale snake_case config fields that `ConfigLoader` no longer produces** ([#49](https://github.com/bvisible/mcp-ssh-manager/issues/49) — thanks [@egoan82](https://github.com/egoan82) for the excellent root-cause report; fixed in [#50](https://github.com/bvisible/mcp-ssh-manager/pull/50))
+  - Since the v3.0.0 ConfigLoader refactor, resolved server configs expose **camelCase** fields (`sudoPassword`, `defaultDir`, `keyPath`), but several handlers still read the pre-3.0 snake_case/lowercase names — always `undefined`, so their fallback branches silently never ran:
+    - `ssh_execute_sudo` ignored the configured `SUDO_PASSWORD` → `sudo: a terminal is required to authenticate` on hosts without a TTY on the exec channel
+    - `ssh_execute` / `ssh_group_execute` / `ssh_execute_sudo` ignored `DEFAULT_DIR` — commands silently ran in `$HOME`
+    - `ssh_list_servers` always reported an empty `defaultDir`
+    - `ssh_sync` never passed the configured SSH key to rsync (`-i` / `BatchMode=yes`), falling back to whatever default key the agent offered
+  - No configuration change required: `.env`/TOML source keys (`SUDO_PASSWORD`, `default_dir`, `key_path`, …) are unchanged — existing configs simply start working again.
+
+### Added
+
+- Regression test `tests/test-config-field-names.js` (`npm run test:fieldnames`, part of `npm test`): locks the ConfigLoader's output field names from both `.env` and TOML sources, and statically forbids stale `.sudo_password` / `.default_dir` / `.keypath` access in `src/`.
+
 ## [3.6.5] - 2026-06-30
 
 ### Security

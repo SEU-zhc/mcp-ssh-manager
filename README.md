@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 [![npm version](https://img.shields.io/npm/v/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
 [![npm downloads](https://img.shields.io/npm/dt/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
-[![Version](https://img.shields.io/badge/Version-3.6.5-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.6.5)
+[![Version](https://img.shields.io/badge/Version-3.6.6-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.6.6)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-5A67D8?style=for-the-badge&logo=anthropic)](https://claude.ai/code)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-Compatible-00A67E?style=for-the-badge&logo=openai)](https://openai.com/codex)
 [![MCP](https://img.shields.io/badge/MCP-Server-orange?style=for-the-badge)](https://modelcontextprotocol.io)
@@ -20,18 +20,24 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 ---
 
-## 🎉 What's New in v3.6.5
+## 🎉 What's New in v3.6.6
 
-**Security fix: `ssh_db_query` shell injection + a row-count fix** (Released: June 30, 2026)
+**Bugfix: per-server `SUDO_PASSWORD`, `DEFAULT_DIR` and `ssh_sync` key auth work again** (Released: July 11, 2026)
 
-- **🔒 `ssh_db_query` no longer lets the remote shell parse your query** ([#44](https://github.com/bvisible/mcp-ssh-manager/pull/44) — thanks [@technophile77](https://github.com/technophile77)) — the builders interpolated the query into a double-quoted shell string (`mysql -e "${query}"`, `psql -c "${query}"`, `mongo --eval "${query}"`), so the remote shell evaluated backticks and `$(…)` **before** the database saw it. That both **corrupted** backtick identifiers (hyphenated DB names, cross-DB joins → empty results, no error) **and** let the "SELECT-only" tool **run arbitrary shell commands** on the host. The query is now delivered on **stdin via a single-quoted heredoc**, so only the database engine ever interprets it.
-- **🔢 `ssh_db_query` reports the real `row_count`** ([#45](https://github.com/bvisible/mcp-ssh-manager/pull/45) — thanks [@technophile77](https://github.com/technophile77)) — it used to count the cosmetic JSON-wrapper line (1 row → `2`, 0 rows → `2`); it now derives the count from each engine's actual output (MySQL JSON entries, psql's `(N rows)` footer, MongoDB documents).
+- **🔑 `ssh_execute_sudo` respects the configured `SSH_SERVER_<NAME>_SUDO_PASSWORD` again** ([#49](https://github.com/bvisible/mcp-ssh-manager/issues/49) — thanks [@egoan82](https://github.com/egoan82) for the excellent root-cause report) — since the v3.0.0 ConfigLoader refactor, resolved server configs expose **camelCase** fields (`sudoPassword`), but the handler still read the pre-3.0 snake_case name (`sudo_password`), which is always `undefined`. Non-interactive sudo therefore failed with `sudo: a terminal is required to authenticate` unless the password was passed explicitly on every call.
+- **📁 Same mismatch, same fix for `DEFAULT_DIR` and `ssh_sync` key auth** ([#50](https://github.com/bvisible/mcp-ssh-manager/pull/50)) — `ssh_execute`, `ssh_group_execute` and `ssh_execute_sudo` silently ignored the configured default directory (commands ran in `$HOME`), `ssh_list_servers` always reported an empty `defaultDir`, and `ssh_sync` never passed the configured SSH key to rsync (`-i` / `BatchMode=yes`).
+- **🧪 Regression-proofed** — a new test locks the ConfigLoader's output field names (from both `.env` and TOML) and statically forbids stale snake_case field access in `src/`.
+- **No configuration change required** — your `.env`/TOML keys are unchanged; existing configs simply start working again.
 
-[Read full changelog →](CHANGELOG.md#365---2026-06-30)
+[Read full changelog →](CHANGELOG.md#366---2026-07-11)
 
 ---
 
 ## Previous Releases
+
+### v3.6.5 - `ssh_db_query` shell-injection security fix + real row_count (June 30, 2026)
+
+- **🔒 Queries are delivered on stdin via a single-quoted heredoc** ([#44](https://github.com/bvisible/mcp-ssh-manager/pull/44), [#45](https://github.com/bvisible/mcp-ssh-manager/pull/45) — thanks [@technophile77](https://github.com/technophile77)) — the remote shell no longer parses backticks/`$(…)` inside queries (which corrupted backtick identifiers **and** let the "SELECT-only" tool run arbitrary shell commands), and `row_count` now reflects each engine's real output instead of counting wrapper lines. [Full changelog →](CHANGELOG.md#365---2026-06-30)
 
 ### v3.6.4 - Internal cleanup + a dead-code quality gate (June 18, 2026)
 
