@@ -5,6 +5,21 @@ All notable changes to MCP SSH Manager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.7] - 2026-07-11
+
+### Security
+
+- **Command injection in the database command builders** ([#51](https://github.com/bvisible/mcp-ssh-manager/pull/51) — responsibly disclosed by **Ugur Ozer / AI Risk Management**, see [#48](https://github.com/bvisible/mcp-ssh-manager/issues/48))
+  - Every `ssh_db_*` tool argument — `database`, `table`, `collection`, output/input file paths, and the `user` / `host` / `port` / `password` connection fields — arrives from tool-call parameters and was interpolated straight into a **shell-evaluated** command string in `src/database-manager.js`. A crafted value (`$(…)`, backticks, `; cmd`, `| cmd`, `&& cmd`, bare `> file`) executed arbitrary commands on the configured SSH target, under the account the MCP server uses.
+  - The strongest path is **`ssh_db_list`**: it is classified read-only, so it stayed **allowed in the `readonly` and `restricted`** per-server security modes while still reaching an injectable builder — bypassing the boundary those modes promise.
+  - The v3.6.5 heredoc fix (#44) only hardened `ssh_db_query`'s query **text**; the `list` / `dump` / `import` / `restore` builders and the query builders' **connection flags** were untouched.
+  - **Fix:** a centralized `shellQuote()` (single-quote wrap + `'\''` escaping) now wraps **every** interpolated caller value across all 15 builders. The MySQL list-tables `database` became a shell-quoted positional argument instead of an interpolated `USE <db>` SQL clause, closing the SQL path too. Shell-quoting is transparent for legitimate values.
+
+### Added
+
+- Security regression test `tests/test-database-injection.js` (`npm run test:dbinjection`, part of `npm test`): drives every builder × every caller-controlled parameter × an injection-payload battery (648 combinations) through a real `/bin/sh` with fake DB client binaries and asserts no payload ever executes; unit-tests `shellQuote()`; verifies benign values stay correctly quoted.
+- `SECURITY.md` documenting the private vulnerability disclosure process (GitHub private vulnerability reporting + security email; resolves [#48](https://github.com/bvisible/mcp-ssh-manager/issues/48)).
+
 ## [3.6.6] - 2026-07-11
 
 ### Fixed

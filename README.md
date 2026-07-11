@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 [![npm version](https://img.shields.io/npm/v/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
 [![npm downloads](https://img.shields.io/npm/dt/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
-[![Version](https://img.shields.io/badge/Version-3.6.6-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.6.6)
+[![Version](https://img.shields.io/badge/Version-3.6.7-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.6.7)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-5A67D8?style=for-the-badge&logo=anthropic)](https://claude.ai/code)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-Compatible-00A67E?style=for-the-badge&logo=openai)](https://openai.com/codex)
 [![MCP](https://img.shields.io/badge/MCP-Server-orange?style=for-the-badge)](https://modelcontextprotocol.io)
@@ -20,20 +20,26 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 ---
 
-## 🎉 What's New in v3.6.6
+## 🎉 What's New in v3.6.7
 
-**Bugfix: per-server `SUDO_PASSWORD`, `DEFAULT_DIR` and `ssh_sync` key auth work again** (Released: July 11, 2026)
+**🔒 Security fix: command injection in the database helpers (`ssh_db_list` / `ssh_db_dump` / `ssh_db_import`)** (Released: July 11, 2026)
 
-- **🔑 `ssh_execute_sudo` respects the configured `SSH_SERVER_<NAME>_SUDO_PASSWORD` again** ([#49](https://github.com/bvisible/mcp-ssh-manager/issues/49) — thanks [@egoan82](https://github.com/egoan82) for the excellent root-cause report) — since the v3.0.0 ConfigLoader refactor, resolved server configs expose **camelCase** fields (`sudoPassword`), but the handler still read the pre-3.0 snake_case name (`sudo_password`), which is always `undefined`. Non-interactive sudo therefore failed with `sudo: a terminal is required to authenticate` unless the password was passed explicitly on every call.
-- **📁 Same mismatch, same fix for `DEFAULT_DIR` and `ssh_sync` key auth** ([#50](https://github.com/bvisible/mcp-ssh-manager/pull/50)) — `ssh_execute`, `ssh_group_execute` and `ssh_execute_sudo` silently ignored the configured default directory (commands ran in `$HOME`), `ssh_list_servers` always reported an empty `defaultDir`, and `ssh_sync` never passed the configured SSH key to rsync (`-i` / `BatchMode=yes`).
-- **🧪 Regression-proofed** — a new test locks the ConfigLoader's output field names (from both `.env` and TOML) and statically forbids stale snake_case field access in `src/`.
-- **No configuration change required** — your `.env`/TOML keys are unchanged; existing configs simply start working again.
+- **Every `ssh_db_*` argument is now shell-quoted** ([#51](https://github.com/bvisible/mcp-ssh-manager/pull/51) — responsibly disclosed by **Ugur Ozer / AI Risk Management**, see [#48](https://github.com/bvisible/mcp-ssh-manager/issues/48)) — the database, table, collection, file-path and connection values passed to the database command builders were interpolated straight into a shell-evaluated string, so a crafted value (`$(…)`, backticks, `; cmd`) executed arbitrary commands on the SSH target. The strongest path was **`ssh_db_list`**, which is read-only-classified and therefore stayed allowed in the `readonly` and `restricted` security modes. The v3.6.5 heredoc fix (#44) only covered `ssh_db_query`'s query *text*; this hardens the list/dump/import/restore builders and the query builders' connection flags too.
+- **🧪 Regression-proofed** — a new test drives every builder × every caller-controlled parameter × an injection-payload battery (648 combinations) through a real shell with fake DB binaries and asserts nothing executes.
+- **🔐 `SECURITY.md` added** — documents private vulnerability reporting (GitHub Security tab + security email).
+- **No configuration or API change** — shell-quoting is transparent for normal database/table/file names.
 
-[Read full changelog →](CHANGELOG.md#366---2026-07-11)
+⚠️ **Upgrade recommended for anyone exposing the database tools**, especially operators relying on `readonly` / `restricted` modes as a security boundary.
+
+[Read full changelog →](CHANGELOG.md#367---2026-07-11)
 
 ---
 
 ## Previous Releases
+
+### v3.6.6 - `SUDO_PASSWORD` / `DEFAULT_DIR` / `ssh_sync` key auth work again (July 11, 2026)
+
+- **🔑 camelCase config field reads** ([#50](https://github.com/bvisible/mcp-ssh-manager/pull/50) — thanks [@egoan82](https://github.com/egoan82)) — since the v3.0.0 ConfigLoader refactor, `ssh_execute_sudo` ignored `SUDO_PASSWORD`, `DEFAULT_DIR` was ignored by `ssh_execute`/`ssh_group_execute`/`ssh_list_servers`, and `ssh_sync` never passed the configured SSH key to rsync. All aligned with the loader's camelCase fields, with a regression test locking the loader output shape. [Full changelog →](CHANGELOG.md#366---2026-07-11)
 
 ### v3.6.5 - `ssh_db_query` shell-injection security fix + real row_count (June 30, 2026)
 
