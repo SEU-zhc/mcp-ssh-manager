@@ -672,10 +672,10 @@ registerToolConditional(
         });
       }
 
-      // Use provided cwd, or default_dir from config, or no cwd
+      // Use provided cwd, or the server's configured defaultDir, or no cwd
       const servers = await loadServerConfig();
       const serverConfig = servers[serverName.toLowerCase()];
-      const workingDir = cwd || serverConfig?.default_dir;
+      const workingDir = cwd || serverConfig?.defaultDir;
       const platform = serverConfig?.platform || 'linux';
 
       // Build cwd-prefixed command using platform-appropriate syntax
@@ -898,7 +898,7 @@ registerToolConditional(
       const serverConfig = servers[serverName.toLowerCase()];
 
       // Check if sshpass is available for password authentication
-      if (!serverConfig.keypath && serverConfig.password) {
+      if (!serverConfig.keyPath && serverConfig.password) {
         // Check if sshpass is installed
         try {
           const { execSync } = await import('child_process');
@@ -980,12 +980,12 @@ registerToolConditional(
       const sshOptions = [];
 
       // Different options based on authentication method
-      if (serverConfig.keypath) {
+      if (serverConfig.keyPath) {
         sshOptions.push('-o BatchMode=yes');           // No password prompts
         sshOptions.push('-o StrictHostKeyChecking=accept-new'); // Accept new keys, reject changed ones
         sshOptions.push('-o ConnectTimeout=10');        // Connection timeout
 
-        const keyPath = serverConfig.keypath.replace('~', os.homedir());
+        const keyPath = serverConfig.keyPath.replace('~', os.homedir());
         sshOptions.push(`-i ${keyPath}`);
       } else {
         // With sshpass, we don't use BatchMode
@@ -1893,7 +1893,7 @@ registerToolConditional(
           // does not support `cd && `) vs cd && for Linux/macOS.
           const servers = await loadServerConfig();
           const serverConfig = servers[serverName.toLowerCase()];
-          const workingDir = cwd || serverConfig?.default_dir;
+          const workingDir = cwd || serverConfig?.defaultDir;
           const platform = serverConfig?.platform || 'linux';
           let fullCommand;
           if (workingDir) {
@@ -2133,7 +2133,7 @@ registerToolConditional(
       user: config.user,
       port: config.port || '22',
       auth: config.password ? 'password' : 'key',
-      defaultDir: config.default_dir || '',
+      defaultDir: config.defaultDir || '',
       description: config.description || ''
     }));
 
@@ -2294,9 +2294,9 @@ registerToolConditional(
       // Add password if provided
       if (password) {
         fullCommand = `echo "${password}" | sudo -S ${command.replace(/^sudo /, '')}`;
-      } else if (serverConfig?.sudo_password) {
+      } else if (serverConfig?.sudoPassword) {
         // Use configured sudo password if available
-        fullCommand = `echo "${serverConfig.sudo_password}" | sudo -S ${command.replace(/^sudo /, '')}`;
+        fullCommand = `echo "${serverConfig.sudoPassword}" | sudo -S ${command.replace(/^sudo /, '')}`;
       }
 
       // Add working directory if specified
@@ -2308,12 +2308,12 @@ registerToolConditional(
         } else {
           fullCommand = `cd ${cwd} && ${fullCommand}`;
         }
-      } else if (serverConfig?.default_dir) {
+      } else if (serverConfig?.defaultDir) {
         if (platform === 'windows') {
-          const escapedDir = serverConfig.default_dir.replace(/'/g, '\'\'');
+          const escapedDir = serverConfig.defaultDir.replace(/'/g, '\'\'');
           fullCommand = `Set-Location '${escapedDir}'; ${fullCommand}`;
         } else {
-          fullCommand = `cd ${serverConfig.default_dir} && ${fullCommand}`;
+          fullCommand = `cd ${serverConfig.defaultDir} && ${fullCommand}`;
         }
       }
 
