@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- **Command injection in the database command builders** ([#51](https://github.com/bvisible/mcp-ssh-manager/pull/51) — responsibly disclosed by **Ugur Ozer / AI Risk Management**, see [#48](https://github.com/bvisible/mcp-ssh-manager/issues/48))
+- **Command injection in the database command builders** ([#51](https://github.com/bvisible/mcp-ssh-manager/pull/51) — responsibly disclosed by **Ugur Ozer, Aeon AI Risk Management** (http://airiskmanagement.ca), see [#48](https://github.com/bvisible/mcp-ssh-manager/issues/48))
   - Every `ssh_db_*` tool argument — `database`, `table`, `collection`, output/input file paths, and the `user` / `host` / `port` / `password` connection fields — arrives from tool-call parameters and was interpolated straight into a **shell-evaluated** command string in `src/database-manager.js`. A crafted value (`$(…)`, backticks, `; cmd`, `| cmd`, `&& cmd`, bare `> file`) executed arbitrary commands on the configured SSH target, under the account the MCP server uses.
   - The strongest path is **`ssh_db_list`**: it is classified read-only, so it stayed **allowed in the `readonly` and `restricted`** per-server security modes while still reaching an injectable builder — bypassing the boundary those modes promise.
   - The v3.6.5 heredoc fix (#44) only hardened `ssh_db_query`'s query **text**; the `list` / `dump` / `import` / `restore` builders and the query builders' **connection flags** were untouched.
