@@ -177,7 +177,17 @@ wizard_add_server() {
     echo "Set a default directory for this server (optional)."
     echo "Example: /var/www/html, /home/user/app, /opt/services"
     prompt_input "Default directory" "" "default_dir"
-    
+
+    local forward_agent="n"
+    echo
+    echo "Forward your local ssh-agent to this server (optional)."
+    echo "Lets remote processes use your local keys — e.g. git over SSH."
+    print_warning "Security: anyone with root on this host can use your loaded keys"
+    print_warning "for the life of the connection. Only enable for servers you trust."
+    if prompt_yes_no "Enable SSH agent forwarding?" "n"; then
+        forward_agent="y"
+    fi
+
     # Step 5: Review
     echo
     print_subheader "Step 5: Review Configuration"
@@ -198,18 +208,27 @@ wizard_add_server() {
     if [ -n "$default_dir" ]; then
         print_table_row "Default Dir:" "$default_dir"
     fi
-    
+    if [ "$forward_agent" = "y" ]; then
+        print_table_row "Agent Forwarding:" "enabled"
+    fi
+
     echo
     if prompt_yes_no "Save this configuration?" "y"; then
         # Save to .env
         add_server_to_env "$server_name" "$host" "$user" "$auth_type" "$auth_value" "$port" "$description"
-        
+
+        local name_upper="$(echo "$server_name" | tr '[:lower:]' '[:upper:]')"
+
         # Add default directory if specified
         if [ -n "$default_dir" ]; then
-            local name_upper="$(echo "$server_name" | tr '[:lower:]' '[:upper:]')"
             echo "SSH_SERVER_${name_upper}_DEFAULT_DIR=$default_dir" >> "$SSH_MANAGER_ENV"
         fi
-        
+
+        # Enable agent forwarding if opted in
+        if [ "$forward_agent" = "y" ]; then
+            echo "SSH_SERVER_${name_upper}_FORWARD_AGENT=true" >> "$SSH_MANAGER_ENV"
+        fi
+
         echo
         print_success "Server '$server_name' added successfully!"
         

@@ -21,8 +21,24 @@ source "$SCRIPT_DIR/lib/menu.sh"
 source "$SCRIPT_DIR/commands/server.sh"
 source "$SCRIPT_DIR/commands/tools.sh"
 
-# Version
-VERSION="3.1.0"
+# Version — derived from package.json so it always reflects the real build,
+# never a hardcoded literal that drifts across releases. Works both in-repo
+# (cli/../package.json) and from an installed copy (package.json bundled next
+# to this script by install.sh). Uses sed only, so no jq dependency.
+get_cli_version() {
+    local pkg ver
+    for pkg in "$SCRIPT_DIR/../package.json" "$SCRIPT_DIR/package.json"; do
+        if [ -f "$pkg" ]; then
+            ver="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$pkg" | head -n1)"
+            if [ -n "$ver" ]; then
+                echo "$ver"
+                return
+            fi
+        fi
+    done
+    echo "unknown"
+}
+VERSION="$(get_cli_version)"
 
 # Show version
 show_version() {

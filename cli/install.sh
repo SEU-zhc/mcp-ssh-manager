@@ -69,6 +69,12 @@ echo "Copying CLI files to $CLI_HOME..."
 rm -rf "$CLI_HOME"
 cp -r "$SCRIPT_DIR" "$CLI_HOME"
 
+# Bundle package.json next to the CLI so it can report the real build version
+# (the CLI derives its version from package.json instead of a hardcoded string).
+if [ -f "$SCRIPT_DIR/../package.json" ]; then
+    cp "$SCRIPT_DIR/../package.json" "$CLI_HOME/package.json"
+fi
+
 # Create executable symlink
 $SUDO ln -sf "$CLI_HOME/ssh-manager" "$INSTALL_DIR/ssh-manager"
 
