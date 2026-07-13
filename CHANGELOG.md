@@ -5,6 +5,17 @@ All notable changes to MCP SSH Manager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] - 2026-07-13
+
+### Added
+
+- **Per-server SSH agent forwarding (`ForwardAgent`)** ([#53](https://github.com/bvisible/mcp-ssh-manager/pull/53) — requested by [@raphaelbahat](https://github.com/raphaelbahat) in [#52](https://github.com/bvisible/mcp-ssh-manager/issues/52))
+  - New opt-in option, `SSH_SERVER_<NAME>_FORWARD_AGENT=true` (`.env`) or `forward_agent = true` (TOML), enabling the equivalent of OpenSSH's `ForwardAgent yes` on a per-server basis. Processes on the remote host can then authenticate to other SSH hosts using the keys held in the operator's local `ssh-agent` (e.g. `git` over SSH), without copying any private key to the server.
+  - Requires a running local agent (`SSH_AUTH_SOCK`); the flag is ignored when no agent is present. `ForwardAgent` is set only alongside a valid agent, since `ssh2` throws otherwise. Because `ssh2`'s connection-level `agentForward` forwards on every exec/shell channel, no per-command change is needed.
+  - A `parseBool()` helper coerces the `.env` string value so `FORWARD_AGENT=false` is not treated as truthy; only `true`/`1`/`yes`/`on` enable it.
+  - **Defaults to `false`.** Documented in the README (*SSH Agent Forwarding*) and CLAUDE.md with the standard security warning (a root user on the remote host can use the forwarded agent for the life of the connection).
+- Tests: `tests/test-agent-forward.js` verifies the `connect()` wiring across the on/off/absent/no-agent states; `tests/test-config-field-names.js` gains `forwardAgent` coverage including `.env` boolean coercion and a TOML export round-trip.
+
 ## [3.6.7] - 2026-07-11
 
 ### Security

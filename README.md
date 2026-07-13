@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 [![npm version](https://img.shields.io/npm/v/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
 [![npm downloads](https://img.shields.io/npm/dt/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
-[![Version](https://img.shields.io/badge/Version-3.6.7-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.6.7)
+[![Version](https://img.shields.io/badge/Version-3.7.0-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.7.0)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-5A67D8?style=for-the-badge&logo=anthropic)](https://claude.ai/code)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-Compatible-00A67E?style=for-the-badge&logo=openai)](https://openai.com/codex)
 [![MCP](https://img.shields.io/badge/MCP-Server-orange?style=for-the-badge)](https://modelcontextprotocol.io)
@@ -20,22 +20,27 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 ---
 
-## 🎉 What's New in v3.6.7
+## 🎉 What's New in v3.7.0
 
-**🔒 Security fix: command injection in the database helpers (`ssh_db_list` / `ssh_db_dump` / `ssh_db_import`)** (Released: July 11, 2026)
+**🔗 Per-server SSH agent forwarding (`ForwardAgent`)** (Released: July 13, 2026)
 
-- **Every `ssh_db_*` argument is now shell-quoted** ([#51](https://github.com/bvisible/mcp-ssh-manager/pull/51) — responsibly disclosed by **Ugur Ozer, Aeon AI Risk Management** (http://airiskmanagement.ca), see [#48](https://github.com/bvisible/mcp-ssh-manager/issues/48)) — the database, table, collection, file-path and connection values passed to the database command builders were interpolated straight into a shell-evaluated string, so a crafted value (`$(…)`, backticks, `; cmd`) executed arbitrary commands on the SSH target. The strongest path was **`ssh_db_list`**, which is read-only-classified and therefore stayed allowed in the `readonly` and `restricted` security modes. The v3.6.5 heredoc fix (#44) only covered `ssh_db_query`'s query *text*; this hardens the list/dump/import/restore builders and the query builders' connection flags too.
-- **🧪 Regression-proofed** — a new test drives every builder × every caller-controlled parameter × an injection-payload battery (648 combinations) through a real shell with fake DB binaries and asserts nothing executes.
-- **🔐 `SECURITY.md` added** — documents private vulnerability reporting (GitHub Security tab + security email).
-- **No configuration or API change** — shell-quoting is transparent for normal database/table/file names.
+- **New opt-in `FORWARD_AGENT` / `forward_agent` option** ([#53](https://github.com/bvisible/mcp-ssh-manager/pull/53) — requested by [@raphaelbahat](https://github.com/raphaelbahat) in [#52](https://github.com/bvisible/mcp-ssh-manager/issues/52)) — enable the equivalent of OpenSSH's `ForwardAgent yes` per server, so processes on the remote host can authenticate to *other* SSH hosts using the keys in your **local** `ssh-agent` (e.g. `git clone` over SSH on a remote server using your local GitHub key), without copying any private key to the server.
+- **Safe by construction** — requires a running local agent (`SSH_AUTH_SOCK`); the flag is ignored when no agent is present, so it never breaks a connection. Boolean parsing treats only `true`/`1`/`yes`/`on` as enabled — `FORWARD_AGENT=false` stays off.
+- **⚠️ Defaults to `false`** — agent forwarding lets anyone with root on the remote host use your loaded keys for the life of the connection, so enable it only for servers you trust. See the new *SSH Agent Forwarding* section in the docs.
 
-⚠️ **Upgrade recommended for anyone exposing the database tools**, especially operators relying on `readonly` / `restricted` modes as a security boundary.
+```env
+SSH_SERVER_MYSERVER_FORWARD_AGENT=true
+```
 
-[Read full changelog →](CHANGELOG.md#367---2026-07-11)
+[Read full changelog →](CHANGELOG.md#370---2026-07-13)
 
 ---
 
 ## Previous Releases
+
+### v3.6.7 - Security: command injection fix in the database helpers (July 11, 2026)
+
+- **🔒 Every `ssh_db_*` argument is now shell-quoted** ([#51](https://github.com/bvisible/mcp-ssh-manager/pull/51) — responsibly disclosed by **Ugur Ozer, Aeon AI Risk Management** (http://airiskmanagement.ca), see [#48](https://github.com/bvisible/mcp-ssh-manager/issues/48)) — caller-controlled values (`ssh_db_list` most notably, which stayed allowed in `readonly`/`restricted` modes) were interpolated into shell-evaluated strings, allowing arbitrary command execution on the SSH target. A centralized `shellQuote()` now wraps every value across all 15 builders, guarded by a 648-combination injection test. [Full changelog →](CHANGELOG.md#367---2026-07-11)
 
 ### v3.6.6 - `SUDO_PASSWORD` / `DEFAULT_DIR` / `ssh_sync` key auth work again (July 11, 2026)
 
