@@ -157,6 +157,7 @@ SSH_SERVER_[NAME]_SUDO_PASSWORD=pass       # Optional for automated sudo
 SSH_SERVER_[NAME]_PLATFORM=windows         # Optional: "linux" (default) or "windows"
 SSH_SERVER_[NAME]_PROXYJUMP=bastion        # Optional: name of another server to use as jump host
 SSH_SERVER_[NAME]_PROXYCOMMAND=command      # Optional: custom proxy command (ncat, ssh -W, etc.)
+SSH_SERVER_[NAME]_FORWARD_AGENT=true       # Optional: forward local ssh-agent to remote (needs SSH_AUTH_SOCK; security risk)
 ```
 
 ### TOML Format
@@ -173,6 +174,7 @@ sudo_password = "pass"                     # Optional for automated sudo
 platform = "windows"                       # Optional: "linux" (default) or "windows"
 proxy_jump = "bastion"                     # Optional: name of another server to use as jump host
 proxy_command = "command"                   # Optional: custom proxy command (ncat, ssh -W, etc.)
+forward_agent = true                       # Optional: forward local ssh-agent to remote (needs SSH_AUTH_SOCK; security risk)
 ```
 
 ## Key Implementation Details

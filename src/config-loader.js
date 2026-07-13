@@ -32,6 +32,16 @@ function normalizeMode(raw, serverName) {
   return normalized;
 }
 
+// Parse a boolean-ish config value. Accepts native booleans (TOML) and the
+// strings "true"/"1"/"yes"/"on" (case-insensitive) from .env, where every value
+// is a string. Everything else — "false", "0", "", undefined — is false, so an
+// opt-in flag never turns on by accident.
+function parseBool(raw) {
+  if (raw === true) return true;
+  if (typeof raw !== 'string') return false;
+  return ['true', '1', 'yes', 'on'].includes(raw.trim().toLowerCase());
+}
+
 export class ConfigLoader {
   constructor() {
     this.servers = new Map();
@@ -138,6 +148,7 @@ export class ConfigLoader {
           platform: serverConfig.platform ? serverConfig.platform.toLowerCase() : undefined,
           proxyJump: serverConfig.proxy_jump,
           proxyCommand: serverConfig.proxy_command || serverConfig.proxycommand,
+          forwardAgent: parseBool(serverConfig.forward_agent),
           mode,
           allowPatterns: tomlAllow,
           denyPatterns: tomlDeny,
@@ -208,6 +219,7 @@ export class ConfigLoader {
           platform: (env[`SSH_SERVER_${match[1]}_PLATFORM`] || '').toLowerCase() || undefined,
           proxyJump: env[`SSH_SERVER_${match[1]}_PROXYJUMP`],
           proxyCommand: env[`SSH_SERVER_${match[1]}_PROXYCOMMAND`],
+          forwardAgent: parseBool(env[`SSH_SERVER_${match[1]}_FORWARD_AGENT`]),
           mode,
           allowPatterns: envAllow,
           denyPatterns: envDeny,
@@ -266,6 +278,8 @@ export class ConfigLoader {
       if (server.platform) serverConfig.platform = server.platform;
       if (server.proxyJump) serverConfig.proxy_jump = server.proxyJump;
       if (server.proxyCommand) serverConfig.proxy_command = server.proxyCommand;
+      // Only emit when opted in, so generated TOML stays clean by default.
+      if (server.forwardAgent) serverConfig.forward_agent = true;
       // Only emit security fields if they diverge from defaults — keeps generated
       // TOML files clean for users who never opted in.
       if (server.mode && server.mode !== 'unrestricted') serverConfig.mode = server.mode;

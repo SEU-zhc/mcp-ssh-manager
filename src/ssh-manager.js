@@ -152,6 +152,13 @@ class SSHManager {
       // Use ssh-agent if available (handles passphrase-protected keys transparently)
       if (process.env.SSH_AUTH_SOCK) {
         connConfig.agent = process.env.SSH_AUTH_SOCK;
+        // Opt-in per-server agent forwarding. ssh2 requires `agent` to be set,
+        // so we only enable it inside this block — otherwise ssh2 throws at
+        // connect. With allowAgentFwd on, every exec/shell channel forwards the
+        // agent automatically, so no per-command change is needed.
+        if (this.config.forwardAgent) {
+          connConfig.agentForward = true;
+        }
       }
 
       // Add authentication (support both keyPath and keypath for compatibility)

@@ -24,7 +24,8 @@ const EXPECTED_CAMEL_FIELDS = {
   defaultDir: '/opt/fieldcheck',
   sudoPassword: 'sudo-secret',
   proxyJump: 'bastion',
-  proxyCommand: 'ncat --proxy 127.0.0.1:1080 %h %p'
+  proxyCommand: 'ncat --proxy 127.0.0.1:1080 %h %p',
+  forwardAgent: true
 };
 
 // Stale names that must NOT exist on resolved server configs (pre-v3.0.0 shape).
@@ -64,6 +65,7 @@ async function testEnvFieldNames() {
     'SSH_SERVER_FIELDCHECK_ENV_PLATFORM=linux',
     'SSH_SERVER_FIELDCHECK_ENV_PROXYJUMP=bastion',
     'SSH_SERVER_FIELDCHECK_ENV_PROXYCOMMAND=ncat --proxy 127.0.0.1:1080 %h %p',
+    'SSH_SERVER_FIELDCHECK_ENV_FORWARD_AGENT=true',
     ''
   ].join('\n'));
 
@@ -98,6 +100,7 @@ async function testTomlFieldNames() {
     'platform = "linux"',
     'proxy_jump = "bastion"',
     'proxy_command = "ncat --proxy 127.0.0.1:1080 %h %p"',
+    'forward_agent = true',
     ''
   ].join('\n'));
 
@@ -107,6 +110,63 @@ async function testTomlFieldNames() {
     assertServerShape(servers.get('fieldcheck_toml'), 'TOML');
     ok('TOML loader maps snake_case source keys to camelCase fields only');
   } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// forwardAgent (issue #52) is a boolean flag. In .env every value is a string,
+// so the loader must coerce — and critically NOT treat the string "false" as
+// truthy. This locks the coercion for both sources and the TOML export round-trip.
+async function testForwardAgentCoercion() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-mgr-fwdagent-'));
+  const envPath = path.join(dir, 'test.env');
+  fs.writeFileSync(envPath, [
+    'SSH_SERVER_FA_ON_HOST=h', 'SSH_SERVER_FA_ON_USER=u', 'SSH_SERVER_FA_ON_FORWARD_AGENT=true',
+    'SSH_SERVER_FA_OFF_HOST=h', 'SSH_SERVER_FA_OFF_USER=u', 'SSH_SERVER_FA_OFF_FORWARD_AGENT=false',
+    'SSH_SERVER_FA_YES_HOST=h', 'SSH_SERVER_FA_YES_USER=u', 'SSH_SERVER_FA_YES_FORWARD_AGENT=YES',
+    'SSH_SERVER_FA_NONE_HOST=h', 'SSH_SERVER_FA_NONE_USER=u',
+    ''
+  ].join('\n'));
+  const tomlPath = path.join(dir, 'config.toml');
+  fs.writeFileSync(tomlPath, [
+    '[ssh_servers.fa_toml_bool]', 'host = "h"', 'user = "u"', 'forward_agent = true',
+    '[ssh_servers.fa_toml_str]', 'host = "h"', 'user = "u"', 'forward_agent = "true"',
+    '[ssh_servers.fa_toml_none]', 'host = "h"', 'user = "u"',
+    ''
+  ].join('\n'));
+
+  try {
+    const envLoader = new ConfigLoader();
+    const envs = await envLoader.load({ envPath, tomlPath: path.join(dir, 'absent.toml') });
+    assert.strictEqual(envs.get('fa_on').forwardAgent, true, 'env FORWARD_AGENT=true → true');
+    assert.strictEqual(envs.get('fa_off').forwardAgent, false, 'env FORWARD_AGENT=false → false (must not be a truthy string)');
+    assert.strictEqual(envs.get('fa_yes').forwardAgent, true, 'env FORWARD_AGENT=YES → true');
+    assert.strictEqual(envs.get('fa_none').forwardAgent, false, 'no FORWARD_AGENT → false');
+
+    // TOML export round-trip: opted-in server keeps the flag, opted-out server
+    // drops it. Scrub process.env first so the reload reads purely from the
+    // exported TOML, not the ambient environment dotenv just populated.
+    const exported = envLoader.exportToToml();
+    assert.ok(/forward_agent = true/.test(exported), 'exportToToml emits forward_agent = true for opted-in server');
+    for (const key of Object.keys(process.env)) {
+      if (key.startsWith('SSH_SERVER_FA_')) delete process.env[key];
+    }
+    const roundtripPath = path.join(dir, 'roundtrip.toml');
+    fs.writeFileSync(roundtripPath, exported);
+    const reloaded = await new ConfigLoader().load({ envPath: path.join(dir, 'absent.env'), tomlPath: roundtripPath });
+    assert.strictEqual(reloaded.get('fa_on').forwardAgent, true, 'export→reload keeps forwardAgent=true for opted-in server');
+    assert.strictEqual(reloaded.get('fa_off').forwardAgent, false, 'export→reload leaves forwardAgent=false for opted-out server');
+
+    const tomlLoader = new ConfigLoader();
+    const toml = await tomlLoader.load({ envPath: path.join(dir, 'absent.env'), tomlPath });
+    assert.strictEqual(toml.get('fa_toml_bool').forwardAgent, true, 'TOML forward_agent = true → true');
+    assert.strictEqual(toml.get('fa_toml_str').forwardAgent, true, 'TOML forward_agent = "true" → true');
+    assert.strictEqual(toml.get('fa_toml_none').forwardAgent, false, 'no forward_agent → false');
+    ok('forwardAgent coerces env/TOML booleans correctly ("false"/absent → false) and round-trips through export');
+  } finally {
+    for (const key of Object.keys(process.env)) {
+      if (key.startsWith('SSH_SERVER_FA_')) delete process.env[key];
+    }
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }
@@ -135,6 +195,7 @@ function testNoStaleAccessInSource() {
 async function main() {
   await testEnvFieldNames();
   await testTomlFieldNames();
+  await testForwardAgentCoercion();
   testNoStaleAccessInSource();
   console.log(`\n✅ config field name tests passed (${passed} checks)`);
 }

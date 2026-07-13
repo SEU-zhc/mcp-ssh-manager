@@ -674,6 +674,7 @@ SSH_SERVER_[NAME]_DESCRIPTION=Description  # Optional
 SSH_SERVER_[NAME]_PLATFORM=windows  # Optional: "linux" (default) or "windows"
 SSH_SERVER_[NAME]_PROXYJUMP=bastion  # Optional: name of another server to use as jump host
 SSH_SERVER_[NAME]_PROXYCOMMAND=command  # Optional: custom proxy command (ncat, ssh -W, etc.)
+SSH_SERVER_[NAME]_FORWARD_AGENT=true  # Optional: forward local ssh-agent to remote (needs SSH_AUTH_SOCK; security risk — see SSH Agent section)
 
 # Example: Linux server
 SSH_SERVER_PRODUCTION_HOST=prod.example.com
@@ -803,6 +804,25 @@ passphrase = "your_passphrase"
 ```
 
 > **Note:** SSH Agent is preferred over storing passphrases in config files for better security.
+
+### 🔗 SSH Agent Forwarding
+
+Enable per-server agent forwarding (the equivalent of OpenSSH's `ForwardAgent yes`) so processes on the remote host can authenticate to *other* SSH hosts using the keys in your **local** `ssh-agent` — e.g. `git clone` over SSH on a remote server using your local GitHub key, without copying any private key to the server.
+
+It is **opt-in per server** and defaults to `false`. It requires a running local agent (`SSH_AUTH_SOCK` present); when the agent is unavailable the flag is simply ignored.
+
+`.env` format:
+```env
+SSH_SERVER_MYSERVER_FORWARD_AGENT=true
+```
+
+TOML format:
+```toml
+[ssh_servers.myserver]
+forward_agent = true
+```
+
+> ⚠️ **Security warning:** agent forwarding lets any process that can read the forwarded agent socket on the remote host — including anyone with **root** there — use your loaded keys to impersonate you against other hosts *for the life of the connection*. Only enable it for servers you trust, mirroring the same caution `ssh_config(5)` advises for `ForwardAgent`.
 
 ## 📚 Advanced Usage
 
