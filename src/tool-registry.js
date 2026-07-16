@@ -7,7 +7,7 @@
 
 /**
  * Tool groups with their associated tools
- * Total: 37 tools across 6 groups
+ * Total: 42 tools across 7 groups
  */
 export const TOOL_GROUPS = {
   // Core group (5 tools) - Essential SSH operations
@@ -69,6 +69,15 @@ export const TOOL_GROUPS = {
     'ssh_execute_group',
     'ssh_group_manage',
     'ssh_history'
+  ],
+
+  // Cloud group (5 tools) - AutoDL GPU instance lifecycle
+  cloud: [
+    'ssh_autodl_create',
+    'ssh_autodl_list',
+    'ssh_autodl_status',
+    'ssh_autodl_power',
+    'ssh_autodl_destroy'
   ]
 };
 
@@ -81,7 +90,8 @@ export const TOOL_GROUP_DESCRIPTIONS = {
   monitoring: 'System health checks, service monitoring, process management, and alerts',
   backup: 'Automated backup and restore for databases and files',
   database: 'Database operations (MySQL, PostgreSQL, MongoDB)',
-  advanced: 'Advanced features (deployment, sudo, tunnels, groups, aliases, hooks, profiles)'
+  advanced: 'Advanced features (deployment, sudo, tunnels, groups, aliases, hooks, profiles)',
+  cloud: 'AutoDL GPU cloud instance lifecycle (auto-register, list/status, power on/off, destroy)'
 };
 
 /**
@@ -93,7 +103,8 @@ export const TOOL_GROUP_COUNTS = {
   monitoring: 6,
   backup: 4,
   database: 4,
-  advanced: 14
+  advanced: 14,
+  cloud: 5
 };
 
 /**

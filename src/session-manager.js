@@ -42,9 +42,11 @@ class SSHSession {
   }
 
   /**
-   * Initialize the session with a shell
+   * Initialize the session with a shell. initCommand (if given) runs once,
+   * right after the shell is ready, before the first ssh_session_send —
+   * e.g. sourcing AutoDL's network_turbo accelerator for the life of the session.
    */
-  async initialize() {
+  async initialize(initCommand) {
     try {
       logger.info(`Initializing SSH session ${this.id}`, {
         server: this.serverName
@@ -94,6 +96,10 @@ class SSHSession {
 
       // Allow context queries through standard execute flow
       this.state = SESSION_STATES.READY;
+
+      if (initCommand) {
+        await this.execute(initCommand, { silent: true });
+      }
 
       // Get initial working directory
       await this.updateContext();
@@ -288,14 +294,14 @@ class SSHSession {
 /**
  * Create a new SSH session
  */
-export async function createSession(serverName, ssh) {
+export async function createSession(serverName, ssh, initCommand) {
   const sessionId = `ssh_${Date.now()}_${uuidv4().substring(0, 8)}`;
 
   const session = new SSHSession(sessionId, serverName, ssh);
   sessions.set(sessionId, session);
 
   try {
-    await session.initialize();
+    await session.initialize(initCommand);
 
     logger.info('SSH session created', {
       id: sessionId,

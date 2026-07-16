@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 [![npm version](https://img.shields.io/npm/v/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
 [![npm downloads](https://img.shields.io/npm/dt/mcp-ssh-manager.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/mcp-ssh-manager)
-[![Version](https://img.shields.io/badge/Version-3.7.0-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.7.0)
+[![Version](https://img.shields.io/badge/Version-3.8.0-brightgreen?style=for-the-badge)](https://github.com/bvisible/mcp-ssh-manager/releases/tag/v3.8.0)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-5A67D8?style=for-the-badge&logo=anthropic)](https://claude.ai/code)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI_Codex-Compatible-00A67E?style=for-the-badge&logo=openai)](https://openai.com/codex)
 [![MCP](https://img.shields.io/badge/MCP-Server-orange?style=for-the-badge)](https://modelcontextprotocol.io)
@@ -20,23 +20,32 @@ A Model Context Protocol (MCP) server that enables **Claude Code** and **OpenAI 
 
 ---
 
-## 🎉 What's New in v3.7.0
+## 🎉 What's New in v3.8.0
 
-**🔗 Per-server SSH agent forwarding (`ForwardAgent`)** (Released: July 13, 2026)
+**☁️ AutoDL GPU cloud instance lifecycle** (Released: July 16, 2026)
+
+- **New `cloud` tool group (5 tools)**: `ssh_autodl_create`, `ssh_autodl_list`, `ssh_autodl_status`, `ssh_autodl_power`, `ssh_autodl_destroy` — rent, inspect, power on/off, and release [AutoDL](https://www.autodl.com) GPU instances (容器实例 Pro) without leaving Claude Code / OpenAI Codex.
+- **Auto-registration**: `ssh_autodl_create` boots the instance, waits for it to come up, and writes the returned SSH host/port/password straight into your server config — it's immediately usable with `ssh_execute`, `ssh_upload`, `ssh_sync`, etc., no manual setup step.
+- **One-call teardown**: `ssh_autodl_destroy` powers off, releases (irreversible), and deregisters the server in a single call.
+- Requires a new `AUTODL_TOKEN` env var (AutoDL console → 设置 → 开发者Token). Creating/releasing instances is a **real, billable** cloud action.
+
+```env
+AUTODL_TOKEN=your_autodl_developer_token_here
+```
+
+[Read full changelog →](CHANGELOG.md#380---2026-07-16)
+
+---
+
+## Previous Releases
+
+### v3.7.0 - Per-server SSH agent forwarding (`ForwardAgent`) (July 13, 2026)
 
 - **New opt-in `FORWARD_AGENT` / `forward_agent` option** ([#53](https://github.com/bvisible/mcp-ssh-manager/pull/53) — requested by [@raphaelbahat](https://github.com/raphaelbahat) in [#52](https://github.com/bvisible/mcp-ssh-manager/issues/52)) — enable the equivalent of OpenSSH's `ForwardAgent yes` per server, so processes on the remote host can authenticate to *other* SSH hosts using the keys in your **local** `ssh-agent` (e.g. `git clone` over SSH on a remote server using your local GitHub key), without copying any private key to the server.
 - **Safe by construction** — requires a running local agent (`SSH_AUTH_SOCK`); the flag is ignored when no agent is present, so it never breaks a connection. Boolean parsing treats only `true`/`1`/`yes`/`on` as enabled — `FORWARD_AGENT=false` stays off.
 - **⚠️ Defaults to `false`** — agent forwarding lets anyone with root on the remote host use your loaded keys for the life of the connection, so enable it only for servers you trust. See the new *SSH Agent Forwarding* section in the docs.
 
-```env
-SSH_SERVER_MYSERVER_FORWARD_AGENT=true
-```
-
 [Read full changelog →](CHANGELOG.md#370---2026-07-13)
-
----
-
-## Previous Releases
 
 ### v3.6.7 - Security: command injection fix in the database helpers (July 11, 2026)
 
@@ -236,7 +245,7 @@ This release adds **12 new MCP tools** transforming SSH Manager into a comprehen
 
 **NEW in v3.1**: Reduce Claude Code context usage by 92% with tool activation management!
 
-MCP SSH Manager includes **37 tools** organized into **6 groups**. By default, all tools are enabled, but you can optimize for your specific workflow:
+MCP SSH Manager includes **42 tools** organized into **7 groups**. By default, all tools are enabled, but you can optimize for your specific workflow:
 
 ### Quick Setup
 
@@ -256,9 +265,9 @@ ssh-manager tools disable backup
 
 | Mode | Tools | Context Usage | Best For |
 |------|-------|---------------|----------|
-| **All** (default) | 37 tools | ~43.5k tokens | Full feature set, most users |
+| **All** (default) | 42 tools | ~45k tokens | Full feature set, most users |
 | **Minimal** | 5 tools | ~3.5k tokens | Basic SSH operations only |
-| **Custom** | 5-37 tools | Varies | Tailored to your workflow |
+| **Custom** | 5-42 tools | Varies | Tailored to your workflow |
 
 ### Tool Groups
 
@@ -268,6 +277,7 @@ ssh-manager tools disable backup
 - **Backup** (4 tools) - Database and file backups
 - **Database** (4 tools) - MySQL, PostgreSQL, MongoDB operations
 - **Advanced** (14 tools) - Deployment, sudo, tunnels, groups, aliases, etc.
+- **Cloud** (5 tools) - AutoDL GPU instance auto-register/manage/destroy
 
 ### Benefits
 
@@ -644,6 +654,33 @@ Manage configuration profiles for different project types.
 - Available profiles: default, frappe, docker, nodejs
 - Example: Switch between different project configurations
 
+### Cloud / AutoDL Tools (v3.8+) ☁️
+
+Rent, manage, and destroy [AutoDL](https://www.autodl.com) GPU cloud instances (容器实例 Pro) directly from Claude Code / OpenAI Codex. Requires an `AUTODL_TOKEN` (console → 设置 → 开发者Token). Instances created this way are registered automatically as ssh-manager servers, so they're immediately usable with `ssh_execute`, `ssh_upload`, `ssh_sync`, etc.
+
+#### `ssh_autodl_create` 🆕
+Rent and boot a new GPU instance, then register it as an ssh-manager server.
+- Parameters: `name` (optional local server name), `gpuSpecUuid`, `imageUuid`, `gpuAmount`, `expandSystemDiskGb`, `cudaVFrom`, `dataCenterList`, `startCommand`, `waitForRunning`, `waitTimeoutMs`, `networkTurbo` (default true)
+- Creates a **real, billable** cloud instance
+- Waits for "running" status by default and writes the returned SSH host/port/password straight into your server config
+- `networkTurbo: true` (default) sources AutoDL's built-in `/etc/network_turbo` accelerator for faster github.com/huggingface.co access — re-applied on every `ssh_execute`/`ssh_execute_sudo`/`ssh_execute_group` call, sourced once at open for `ssh_session_start`. Pass `false` to opt out.
+
+#### `ssh_autodl_list`
+List AutoDL instances on the account, cross-referenced with local ssh-manager registrations.
+- Parameters: `pageIndex`, `pageSize`
+
+#### `ssh_autodl_status`
+Get live status/connection info for one instance; refreshes its registered server entry when running.
+- Parameters: `server` (local name or instance_uuid), `register` (default true)
+
+#### `ssh_autodl_power`
+Power an instance on or off. Powering off stops GPU billing while preserving the instance/disk.
+- Parameters: `server`, `action` (on/off), `startCommand` (optional, action=on only)
+
+#### `ssh_autodl_destroy` ⚠️
+Power off, release (**irreversible**), and deregister an instance.
+- Parameters: `server`, `force` (skip the power-off/wait-for-shutdown step)
+
 ## 🔧 Configuration
 
 ### Profiles
@@ -726,7 +763,7 @@ The Python management tool (`tools/server_manager.py`) provides:
 ```
 mcp-ssh-manager/
 ├── src/
-│   ├── index.js              # Main MCP server (37 tools)
+│   ├── index.js              # Main MCP server (42 tools)
 │   ├── ssh-manager.js        # SSH connection handling
 │   ├── config-loader.js      # .env & TOML config loading
 │   ├── session-manager.js    # Persistent SSH sessions
@@ -735,6 +772,7 @@ mcp-ssh-manager/
 │   ├── database-manager.js   # Database operations
 │   ├── tunnel-manager.js     # SSH tunnel management
 │   ├── server-groups.js      # Group operations
+│   ├── autodl-manager.js     # AutoDL GPU instance API client + registry
 │   └── ...
 ├── cli/
 │   ├── ssh-manager           # Bash CLI entrypoint

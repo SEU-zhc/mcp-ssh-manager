@@ -168,11 +168,54 @@ async function testDeletedFileIsSafe() {
   ok(`file deleted: getServers() stays robust (no crash, ${Object.keys(servers).length} server(s))`);
 }
 
+// ── New: upsertServer/removeServerEntry incrementally edit the TOML file ──────
+async function testUpsertAndRemoveServer() {
+  const dir = tmpdir('upsert');
+  const tomlPath = path.join(dir, 'ssh-config.toml');
+  const envPath = path.join(dir, '.env');
+  writeToml(tomlPath, {
+    existing: { host: '10.0.0.1', user: 'root', password: 'x', port: 22, description: 'kept as-is' }
+  });
+
+  const manager = new ServerConfigManager({ envPath, tomlPath, preferToml: true });
+  await manager.loadInitial();
+
+  const name = await manager.upsertServer('autodl-test', {
+    host: '1.2.3.4', port: 12345, user: 'root', password: 'secret', platform: 'linux'
+  });
+  assert.strictEqual(name, 'autodl-test');
+
+  let servers = await manager.getServers();
+  assert.deepStrictEqual(Object.keys(servers).sort(), ['autodl-test', 'existing']);
+  assert.strictEqual(servers['autodl-test'].host, '1.2.3.4');
+  assert.strictEqual(servers['autodl-test'].port, 12345);
+  assert.strictEqual(servers.existing.host, '10.0.0.1', 'untouched entries survive an upsert');
+  ok('upsertServer adds a new entry without disturbing existing ones');
+
+  await manager.upsertServer('autodl-test', {
+    host: '5.6.7.8', port: 22, user: 'root', password: 'secret2'
+  });
+  servers = await manager.getServers();
+  assert.strictEqual(servers['autodl-test'].host, '5.6.7.8', 'upsertServer replaces an existing entry by name');
+  ok('upsertServer overwrites an existing entry in place');
+
+  const removed = await manager.removeServerEntry('autodl-test');
+  assert.strictEqual(removed, true);
+  servers = await manager.getServers();
+  assert.deepStrictEqual(Object.keys(servers), ['existing']);
+  ok('removeServerEntry deletes the entry and preserves the rest of the file');
+
+  const removedAgain = await manager.removeServerEntry('autodl-test');
+  assert.strictEqual(removedAgain, false, 'removing a non-existent entry returns false');
+  ok('removeServerEntry is a safe no-op for an unknown server name');
+}
+
 async function main() {
   await testInitialLoadAndHotReload();
   await testLazyReload();
   await testReloadFailureKeepsPrevious();
   await testDeletedFileIsSafe();
+  await testUpsertAndRemoveServer();
   console.log(`\n✅ server config manager tests passed (${passed} checks)`);
 }
 

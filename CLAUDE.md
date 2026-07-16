@@ -61,9 +61,9 @@ ssh-manager tools reset                       # Reset to defaults (all tools)
 ssh-manager tools export-claude               # Export auto-approval config
 ```
 
-**Tool Groups**: core (5), sessions (4), monitoring (6), backup (4), database (4), advanced (14)
+**Tool Groups**: core (5), sessions (4), monitoring (6), backup (4), database (4), advanced (14), cloud (5)
 
-**Modes**: all (37 tools, ~43.5k tokens), minimal (5 tools, ~3.5k tokens), custom (variable)
+**Modes**: all (42 tools, ~43.5k tokens), minimal (5 tools, ~3.5k tokens), custom (variable)
 
 See [docs/TOOL_MANAGEMENT.md](docs/TOOL_MANAGEMENT.md) for complete guide.
 
@@ -128,6 +128,16 @@ The server exposes these tools to Claude Code and OpenAI Codex:
 - `ssh_hooks`: Automation hooks
 - `ssh_profile`: Profile management
 
+### Cloud / AutoDL GPU Instances (v3.8+)
+Requires `AUTODL_TOKEN` (console -> 设置 -> 开发者Token). Manages AutoDL 容器实例 Pro instances end-to-end, registering/deregistering them as ssh-manager servers automatically.
+- `ssh_autodl_create`: Rent + boot a GPU instance and register it as an ssh-manager server
+- `ssh_autodl_list`: List AutoDL instances, cross-referenced with local registrations
+- `ssh_autodl_status`: Get live status/connection info; refreshes the registered server entry
+- `ssh_autodl_power`: Power an instance on/off (stops billing while off)
+- `ssh_autodl_destroy`: Power off, release (irreversible), and deregister
+
+Instances default to `networkTurbo: true`, which sources AutoDL's built-in `/etc/network_turbo` accelerator (faster github.com/githubusercontent.com/githubassets.com/huggingface.co) — repeated on every `ssh_execute`/`ssh_execute_sudo`/`ssh_execute_group` call (each is a one-shot shell with no persistent env), and sourced once at open for `ssh_session_start`/`ssh_session_send` (shared persistent shell). Pass `networkTurbo: false` to `ssh_autodl_create` to opt out.
+
 ## Server Configuration
 
 ### Configuration Formats
@@ -158,6 +168,7 @@ SSH_SERVER_[NAME]_PLATFORM=windows         # Optional: "linux" (default) or "win
 SSH_SERVER_[NAME]_PROXYJUMP=bastion        # Optional: name of another server to use as jump host
 SSH_SERVER_[NAME]_PROXYCOMMAND=command      # Optional: custom proxy command (ncat, ssh -W, etc.)
 SSH_SERVER_[NAME]_FORWARD_AGENT=true       # Optional: forward local ssh-agent to remote (needs SSH_AUTH_SOCK; security risk)
+SSH_SERVER_[NAME]_NETWORK_TURBO=true       # Optional: source AutoDL's /etc/network_turbo accelerator before commands (AutoDL instances only)
 ```
 
 ### TOML Format
@@ -175,6 +186,7 @@ platform = "windows"                       # Optional: "linux" (default) or "win
 proxy_jump = "bastion"                     # Optional: name of another server to use as jump host
 proxy_command = "command"                   # Optional: custom proxy command (ncat, ssh -W, etc.)
 forward_agent = true                       # Optional: forward local ssh-agent to remote (needs SSH_AUTH_SOCK; security risk)
+network_turbo = true                       # Optional: source AutoDL's /etc/network_turbo accelerator before commands (AutoDL instances only)
 ```
 
 ## Key Implementation Details

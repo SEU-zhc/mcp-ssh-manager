@@ -5,6 +5,24 @@ All notable changes to MCP SSH Manager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.0] - 2026-07-16
+
+### Added
+
+- **AutoDL GPU cloud instance lifecycle (new `cloud` tool group, 5 tools)**
+  - `ssh_autodl_create`, `ssh_autodl_list`, `ssh_autodl_status`, `ssh_autodl_power`, `ssh_autodl_destroy` — rent, inspect, power on/off, and release [AutoDL](https://www.autodl.com) 容器实例 Pro GPU instances directly from Claude Code / OpenAI Codex, authenticated via a new `AUTODL_TOKEN` env var (console → 设置 → 开发者Token).
+  - `ssh_autodl_create` boots an instance, waits for it to reach `running`, and **registers it as an ssh-manager server automatically** — the returned proxy host/port/root password are written straight into the TOML/`.env` server config, so the instance is immediately usable with `ssh_execute`, `ssh_upload`, `ssh_sync`, etc. with no manual configuration step.
+  - `ssh_autodl_destroy` powers the instance off, waits for shutdown, releases it (irreversible), and deregisters it from the local server list in one call.
+  - A local JSON registry (`.autodl-instances.json`) maps each registered server name to its AutoDL `instance_uuid`, so every tool can be called by the same server name used elsewhere (`ssh_execute`, `ssh_alias`, etc.) instead of a raw UUID.
+  - New `src/autodl-manager.js` is the only outbound HTTPS client in the project (native `fetch`, no new dependency) — every other tool works by running commands over an existing SSH connection.
+  - `ServerConfigManager` gained `upsertServer()`/`removeServerEntry()`, an incremental read-modify-write of a single `[ssh_servers.<name>]` TOML entry (previously only full-file export/migration existed) — reused by the AutoDL tools but usable by any future feature that needs to register a server at runtime.
+- Tests: `tests/test-autodl-manager.js` (API client request/error handling, snapshot→server-config mapping, local registry CRUD) and new `upsertServer`/`removeServerEntry` coverage in `tests/test-server-config-manager.js`.
+- **AutoDL academic-network accelerator (`network_turbo`)** — new per-server `networkTurbo` flag (`SSH_SERVER_[NAME]_NETWORK_TURBO` / `network_turbo` in TOML, default `true` for instances created by `ssh_autodl_create`) sources AutoDL's built-in `/etc/network_turbo` proxy for faster github.com/githubusercontent.com/githubassets.com/huggingface.co access. `ssh_execute`/`ssh_execute_sudo`/`ssh_execute_group` re-source it on every call (each opens a fresh one-shot shell); `ssh_session_start` sources it once when the persistent session opens instead. Guarded with `[ -f /etc/network_turbo ]` so it's a harmless no-op on any server without the file.
+
+### Fixed
+
+- `ssh_autodl_create`/`ssh_autodl_status` now divide AutoDL's `payg_price` snapshot field by 1000 before returning it (renamed `paygPricePerHour` → `paygYuanPerHour`) — AutoDL's price fields are denominated in yuan × 1000, so the raw passthrough previously overstated the hourly price by 10x (e.g. reporting ¥18.70/hr for an instance actually billed at ¥1.87/hr).
+
 ## [3.7.0] - 2026-07-13
 
 ### Added

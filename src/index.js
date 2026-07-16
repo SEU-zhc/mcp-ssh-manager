@@ -139,6 +139,7 @@ import {
   formatBytes
 } from './database-manager.js';
 import { loadToolConfig, isToolEnabled } from './tool-config-manager.js';
+import * as autodl from './autodl-manager.js';
 import { evaluatePolicy } from './policy.js';
 import { auditLog } from './audit.js';
 
@@ -690,6 +691,7 @@ registerToolConditional(
       } else {
         fullCommand = expandedCommand;
       }
+      fullCommand = autodl.withNetworkTurbo(serverConfig, platform, fullCommand);
 
       // Log command execution
       const startTime = logger.logCommand(serverName, fullCommand, workingDir);
@@ -1593,7 +1595,11 @@ registerToolConditional(
   async ({ server: serverName, name }) => {
     try {
       const ssh = await getConnection(serverName);
-      const session = await createSession(serverName, ssh);
+      const servers = await loadServerConfig();
+      const serverConfig = servers[serverName.toLowerCase()];
+      const platform = serverConfig?.platform || 'linux';
+      const initCommand = autodl.networkTurboInitCommand(serverConfig, platform);
+      const session = await createSession(serverName, ssh, initCommand);
 
       const sessionName = name || `Session on ${serverName}`;
 
@@ -1907,6 +1913,7 @@ registerToolConditional(
           } else {
             fullCommand = command;
           }
+          fullCommand = autodl.withNetworkTurbo(serverConfig, platform, fullCommand);
 
           const execResult = await execCommandWithTimeout(ssh, fullCommand, { platform }, 30000);
 
@@ -2316,6 +2323,7 @@ registerToolConditional(
           fullCommand = `cd ${serverConfig.defaultDir} && ${fullCommand}`;
         }
       }
+      fullCommand = autodl.withNetworkTurbo(serverConfig, platform, fullCommand);
 
       const result = await execCommandWithTimeout(ssh, fullCommand, { platform }, timeout);
 
@@ -4828,6 +4836,351 @@ registerToolConditional(
             text: `❌ Database query failed: ${error.message}`
           }
         ]
+      };
+    }
+  }
+);
+
+// ============================================================================
+// CLOUD (AUTODL) TOOLS
+// ============================================================================
+//
+// AutoDL (autodl.com) 容器实例 Pro instance lifecycle, layered on top of the
+// existing ssh_* tools: ssh_autodl_create rents + boots a GPU instance and
+// writes it straight into the SSH server config (via serverConfigManager),
+// so it's immediately usable with ssh_execute/ssh_upload/etc. A small local
+// registry (src/autodl-manager.js) maps each registered server name to its
+// AutoDL instance_uuid so the other tools can be called by server name.
+
+function getAutodlToken() {
+  return getRuntimeEnv('AUTODL_TOKEN');
+}
+
+// Resolves a caller-supplied server/instance identifier to an AutoDL
+// instance_uuid: first checks the local registry (keyed by the ssh-manager
+// server name), falling back to treating the input as a raw instance_uuid.
+function resolveAutodlInstance(serverOrUuid) {
+  const record = autodl.getInstanceRecord(serverOrUuid);
+  return {
+    instanceUuid: record ? record.instanceUuid : serverOrUuid,
+    serverName: record ? serverOrUuid.toLowerCase() : null,
+    record
+  };
+}
+
+registerToolConditional(
+  'ssh_autodl_create',
+  {
+    description: 'Rents and boots a new AutoDL GPU instance (容器实例 Pro), then registers it as an ssh-manager server so it is immediately usable with ssh_execute, ssh_upload, ssh_sync, etc. Requires AUTODL_TOKEN to be configured. gpuSpecUuid and imageUuid must be valid AutoDL identifiers (see the tool description defaults and the AutoDL console for the full list). By default waits for the instance to reach "running" before returning; this can take a couple of minutes. Creates a REAL billable cloud instance.',
+    inputSchema: {
+      name: z.string().optional().describe('Local server name to register this instance under. Auto-derived from the instance UUID if omitted.'),
+      gpuSpecUuid: z.string().describe('AutoDL gpu_spec_uuid to rent, e.g. "v-48g" (4090-48G, 通用型), "h800" (H800-80G), "pro6000-p" (PRO6000-96G, 性能型), "v-32g-p" (4080(S)-32G), "v-48g-350w" (3090-48G), "5090-p" (5090-32G), "4090D". The authoritative/current list is in the AutoDL console.'),
+      imageUuid: z.string().describe('AutoDL image_uuid to boot from — a public base image (e.g. "base-image-l2t43iu6uk" = PyTorch cuda11.8/torch2.0.0, "base-image-uxeklgirir" = TensorFlow cuda11.2/tf2.9.0) or one of your own private images.'),
+      gpuAmount: z.number().int().min(1).max(4).default(1).describe('Number of GPUs (1-4)'),
+      expandSystemDiskGb: z.number().int().min(0).max(500).default(0).describe('Extra system disk space in GB beyond the image default'),
+      cudaVFrom: z.number().int().default(113).describe('Minimum CUDA version filter encoded as MMm, e.g. 113 = CUDA >= 11.3, 120 = CUDA >= 12.0'),
+      dataCenterList: z.array(z.string()).optional().describe('Preferred region codes to try in order, e.g. ["westDC3", "beijingDC2"]. Omit to let AutoDL pick any region with stock.'),
+      startCommand: z.string().optional().describe('Shell command to run automatically once the instance boots'),
+      waitForRunning: z.boolean().default(true).describe('Poll until the instance reaches "running" and register its live SSH info. If false, returns immediately with just the instance UUID (call ssh_autodl_status later to finish registration).'),
+      waitTimeoutMs: z.number().int().default(180000).describe('Max milliseconds to wait for "running" status when waitForRunning is true'),
+      networkTurbo: z.boolean().default(true).describe('Have ssh_execute/ssh_execute_sudo/ssh_execute_group automatically source AutoDL\'s built-in academic-network accelerator (/etc/network_turbo) before each command on this server, speeding up github.com/githubusercontent.com/githubassets.com/huggingface.co access. AutoDL does not guarantee this proxy\'s stability — disable if it interferes with your workload.')
+    }
+  },
+  async ({ name, gpuSpecUuid, imageUuid, gpuAmount, expandSystemDiskGb, cudaVFrom, dataCenterList, startCommand, waitForRunning, waitTimeoutMs, networkTurbo }) => {
+    const token = getAutodlToken();
+    if (!token) {
+      return {
+        content: [{ type: 'text', text: formatJSONResponse({ success: false, error: 'AUTODL_TOKEN is not configured. Set it in .env or the environment (console -> 设置 -> 开发者Token).' }) }],
+        isError: true
+      };
+    }
+
+    try {
+      const instanceUuid = await autodl.createInstance(token, {
+        gpuSpecUuid, imageUuid, gpuAmount, expandSystemDiskGb, cudaVFrom, dataCenterList,
+        instanceName: name, startCommand
+      });
+      const serverName = autodl.deriveServerName(name, instanceUuid);
+
+      let snapshot = null;
+      if (waitForRunning) {
+        snapshot = await autodl.waitUntilRunning(token, instanceUuid, { timeoutMs: waitTimeoutMs });
+      }
+
+      let registered = false;
+      if (snapshot) {
+        const serverConfig = autodl.buildServerConfigFromSnapshot(serverName, snapshot, instanceUuid, { networkTurbo });
+        await serverConfigManager.upsertServer(serverName, serverConfig);
+        registered = true;
+      }
+
+      autodl.recordInstance(serverName, {
+        instanceUuid,
+        gpuSpecUuid,
+        imageUuid,
+        dataCenterList: dataCenterList || null,
+        networkTurbo,
+        createdAt: new Date().toISOString()
+      });
+
+      logger.info('AutoDL instance created', { serverName, instanceUuid, registered });
+
+      return {
+        content: [{
+          type: 'text',
+          text: formatJSONResponse({
+            success: true,
+            server: serverName,
+            instanceUuid,
+            status: snapshot ? 'running' : 'pending',
+            registered,
+            host: snapshot?.proxy_host,
+            sshPort: snapshot?.ssh_port,
+            paygYuanPerHour: autodl.paygYuanPerHour(snapshot),
+            networkTurbo,
+            note: registered
+              ? `Registered as ssh-manager server "${serverName}" — usable immediately with ssh_execute etc.`
+              : 'Instance is still provisioning. Call ssh_autodl_status with this server name once it is running to finish registration.'
+          })
+        }]
+      };
+    } catch (error) {
+      logger.error('AutoDL create failed', { error: error.message });
+      return {
+        content: [{ type: 'text', text: formatJSONResponse({ success: false, error: error.message }) }],
+        isError: true
+      };
+    }
+  }
+);
+
+registerToolConditional(
+  'ssh_autodl_list',
+  {
+    description: 'Lists AutoDL 容器实例 Pro instances on the configured account, cross-referenced with which ones are registered as local ssh-manager servers (and under what name). Read-only.',
+    inputSchema: {
+      pageIndex: z.number().int().min(1).default(1).describe('Page number'),
+      pageSize: z.number().int().min(1).max(100).default(50).describe('Results per page')
+    }
+  },
+  async ({ pageIndex, pageSize }) => {
+    const token = getAutodlToken();
+    if (!token) {
+      return {
+        content: [{ type: 'text', text: formatJSONResponse({ success: false, error: 'AUTODL_TOKEN is not configured.' }) }],
+        isError: true
+      };
+    }
+
+    try {
+      const result = await autodl.listInstances(token, { pageIndex, pageSize });
+      const registryByUuid = {};
+      for (const entry of autodl.listRegistry()) {
+        registryByUuid[entry.instanceUuid] = entry.serverName;
+      }
+
+      const instances = (result?.list || []).map((inst) => ({
+        ...inst,
+        registeredAs: registryByUuid[inst.uuid] || null
+      }));
+
+      return {
+        content: [{
+          type: 'text',
+          text: formatJSONResponse({
+            success: true,
+            pageIndex: result?.page_index ?? pageIndex,
+            pageSize: result?.page_size ?? pageSize,
+            resultTotal: result?.result_total ?? instances.length,
+            instances
+          })
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{ type: 'text', text: formatJSONResponse({ success: false, error: error.message }) }],
+        isError: true
+      };
+    }
+  }
+);
+
+registerToolConditional(
+  'ssh_autodl_status',
+  {
+    description: 'Gets live status and connection info for one AutoDL instance, identified either by its local ssh-manager server name (as registered by ssh_autodl_create) or a raw AutoDL instance_uuid. When the instance is running and register is true (default), (re)registers/refreshes it as an ssh-manager server — useful after a power-on, since the proxy host/port can change across power cycles.',
+    inputSchema: {
+      server: z.string().describe('Local server name or raw AutoDL instance_uuid'),
+      register: z.boolean().default(true).describe('Register/refresh the ssh-manager server entry if the instance is running')
+    }
+  },
+  async ({ server, register }) => {
+    const token = getAutodlToken();
+    if (!token) {
+      return {
+        content: [{ type: 'text', text: formatJSONResponse({ success: false, error: 'AUTODL_TOKEN is not configured.' }) }],
+        isError: true
+      };
+    }
+
+    try {
+      const { instanceUuid, serverName: knownServerName, record } = resolveAutodlInstance(server);
+      const status = await autodl.getInstanceStatus(token, instanceUuid);
+
+      let snapshot = null;
+      try {
+        snapshot = await autodl.getInstanceSnapshot(token, instanceUuid);
+      } catch (error) {
+        logger.debug('AutoDL snapshot unavailable', { instanceUuid, error: error.message });
+      }
+
+      let registered = false;
+      const serverName = knownServerName || autodl.deriveServerName(null, instanceUuid);
+      // A record predating this feature (or none at all, e.g. looked up by raw
+      // instance_uuid) has no networkTurbo entry — default it on since every
+      // AutoDL Pro instance ships /etc/network_turbo.
+      const networkTurbo = record?.networkTurbo !== false;
+      if (register && status === autodl.AUTODL_STATUS.RUNNING && snapshot?.proxy_host) {
+        const serverConfig = autodl.buildServerConfigFromSnapshot(serverName, snapshot, instanceUuid, { networkTurbo });
+        await serverConfigManager.upsertServer(serverName, serverConfig);
+        if (!record) {
+          autodl.recordInstance(serverName, { instanceUuid, networkTurbo, createdAt: new Date().toISOString() });
+        }
+        registered = true;
+      }
+
+      return {
+        content: [{
+          type: 'text',
+          text: formatJSONResponse({
+            success: true,
+            server: serverName,
+            instanceUuid,
+            status,
+            registered,
+            host: snapshot?.proxy_host,
+            sshPort: snapshot?.ssh_port,
+            paygYuanPerHour: autodl.paygYuanPerHour(snapshot),
+            networkTurbo,
+            usageInfo: snapshot?.usage_info
+          })
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{ type: 'text', text: formatJSONResponse({ success: false, error: error.message }) }],
+        isError: true
+      };
+    }
+  }
+);
+
+registerToolConditional(
+  'ssh_autodl_power',
+  {
+    description: 'Powers an AutoDL instance on or off, identified by its local ssh-manager server name or a raw instance_uuid. Powering off stops billing for GPU usage (the instance/disk is preserved). The proxy host/port can change after power-on — call ssh_autodl_status afterwards to refresh the registered ssh-manager server entry before connecting.',
+    inputSchema: {
+      server: z.string().describe('Local server name or raw AutoDL instance_uuid'),
+      action: z.enum(['on', 'off']).describe('Power action'),
+      startCommand: z.string().optional().describe('Shell command to run automatically once powered on (action=on only)')
+    }
+  },
+  async ({ server, action, startCommand }) => {
+    const token = getAutodlToken();
+    if (!token) {
+      return {
+        content: [{ type: 'text', text: formatJSONResponse({ success: false, error: 'AUTODL_TOKEN is not configured.' }) }],
+        isError: true
+      };
+    }
+
+    try {
+      const { instanceUuid, serverName } = resolveAutodlInstance(server);
+      if (action === 'on') {
+        await autodl.powerOnInstance(token, instanceUuid, { startCommand });
+      } else {
+        await autodl.powerOffInstance(token, instanceUuid);
+      }
+
+      return {
+        content: [{
+          type: 'text',
+          text: formatJSONResponse({
+            success: true,
+            server: serverName || server,
+            instanceUuid,
+            action,
+            note: action === 'on'
+              ? 'Instance is booting. Call ssh_autodl_status to wait for "running" and refresh its SSH connection info.'
+              : 'Power-off requested. The instance may take a short while to reach "shutdown" — check with ssh_autodl_status.'
+          })
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{ type: 'text', text: formatJSONResponse({ success: false, error: error.message }) }],
+        isError: true
+      };
+    }
+  }
+);
+
+registerToolConditional(
+  'ssh_autodl_destroy',
+  {
+    description: 'Destroys an AutoDL instance: powers it off (waiting for shutdown), releases it (permanent — the instance, its disk, and any unsaved data are gone), and deregisters it from the local ssh-manager server list. Identified by its local server name or a raw instance_uuid. This is IRREVERSIBLE and stops all billing for the instance.',
+    inputSchema: {
+      server: z.string().describe('Local server name or raw AutoDL instance_uuid'),
+      force: z.boolean().default(false).describe('Skip the power-off/wait-for-shutdown step and release directly (only valid if the instance is already shut down)')
+    }
+  },
+  async ({ server, force }) => {
+    const token = getAutodlToken();
+    if (!token) {
+      return {
+        content: [{ type: 'text', text: formatJSONResponse({ success: false, error: 'AUTODL_TOKEN is not configured.' }) }],
+        isError: true
+      };
+    }
+
+    try {
+      const { instanceUuid, serverName } = resolveAutodlInstance(server);
+
+      if (!force) {
+        try {
+          await autodl.powerOffInstance(token, instanceUuid);
+        } catch (error) {
+          logger.debug('AutoDL power-off before release failed (may already be off)', { instanceUuid, error: error.message });
+        }
+        await autodl.waitUntilShutdown(token, instanceUuid);
+      }
+
+      await autodl.releaseInstance(token, instanceUuid);
+
+      let deregistered = false;
+      if (serverName) {
+        deregistered = await serverConfigManager.removeServerEntry(serverName);
+        autodl.removeInstanceRecord(serverName);
+      }
+
+      logger.info('AutoDL instance destroyed', { instanceUuid, serverName, deregistered });
+
+      return {
+        content: [{
+          type: 'text',
+          text: formatJSONResponse({
+            success: true,
+            server: serverName || server,
+            instanceUuid,
+            released: true,
+            deregistered
+          })
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{ type: 'text', text: formatJSONResponse({ success: false, error: error.message }) }],
+        isError: true
       };
     }
   }

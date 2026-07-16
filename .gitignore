@@ -64,4 +64,5 @@ id_ed25519*
 .ssh-manager.log
 .ssh-command-history.json
 .server-groups.json
+.autodl-instances.json
 archived/

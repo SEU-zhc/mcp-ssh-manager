@@ -149,6 +149,7 @@ export class ConfigLoader {
           proxyJump: serverConfig.proxy_jump,
           proxyCommand: serverConfig.proxy_command || serverConfig.proxycommand,
           forwardAgent: parseBool(serverConfig.forward_agent),
+          networkTurbo: parseBool(serverConfig.network_turbo),
           mode,
           allowPatterns: tomlAllow,
           denyPatterns: tomlDeny,
@@ -220,6 +221,7 @@ export class ConfigLoader {
           proxyJump: env[`SSH_SERVER_${match[1]}_PROXYJUMP`],
           proxyCommand: env[`SSH_SERVER_${match[1]}_PROXYCOMMAND`],
           forwardAgent: parseBool(env[`SSH_SERVER_${match[1]}_FORWARD_AGENT`]),
+          networkTurbo: parseBool(env[`SSH_SERVER_${match[1]}_NETWORK_TURBO`]),
           mode,
           allowPatterns: envAllow,
           denyPatterns: envDeny,
@@ -280,6 +282,7 @@ export class ConfigLoader {
       if (server.proxyCommand) serverConfig.proxy_command = server.proxyCommand;
       // Only emit when opted in, so generated TOML stays clean by default.
       if (server.forwardAgent) serverConfig.forward_agent = true;
+      if (server.networkTurbo) serverConfig.network_turbo = true;
       // Only emit security fields if they diverge from defaults — keeps generated
       // TOML files clean for users who never opted in.
       if (server.mode && server.mode !== 'unrestricted') serverConfig.mode = server.mode;
@@ -320,6 +323,7 @@ export class ConfigLoader {
       if (server.platform) lines.push(`SSH_SERVER_${upperName}_PLATFORM=${server.platform}`);
       if (server.proxyJump) lines.push(`SSH_SERVER_${upperName}_PROXYJUMP=${server.proxyJump}`);
       if (server.proxyCommand) lines.push(`SSH_SERVER_${upperName}_PROXYCOMMAND=${server.proxyCommand}`);
+      if (server.networkTurbo) lines.push(`SSH_SERVER_${upperName}_NETWORK_TURBO=true`);
       // Security fields — only emit when non-default to avoid clutter in
       // generated .env files for users who never opted in.
       if (server.mode && server.mode !== 'unrestricted') {

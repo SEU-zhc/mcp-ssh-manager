@@ -2,11 +2,11 @@
 
 ## Overview
 
-MCP SSH Manager provides **37 tools** organized into **6 functional groups**. You can enable or disable tool groups to customize your experience and reduce context usage in Claude Code.
+MCP SSH Manager provides **42 tools** organized into **7 functional groups**. You can enable or disable tool groups to customize your experience and reduce context usage in Claude Code.
 
 ### Why Manage Tools?
 
-- **Reduce Context Usage**: By default, all 37 tools consume ~43.5k tokens in Claude Code. Minimal mode uses only ~3.5k tokens (92% reduction)
+- **Reduce Context Usage**: By default, all 42 tools consume ~45k tokens in Claude Code. Minimal mode uses only ~3.5k tokens (92% reduction)
 - **Fewer Approval Prompts**: Only enabled tools require approval in Claude Code
 - **Faster Loading**: Less tools mean faster MCP server startup
 - **Cleaner Interface**: Only see the tools you actually use
@@ -26,7 +26,7 @@ ssh-manager tools configure
 ```
 
 Choose from three modes:
-1. **All tools** (37 tools) - Full feature set, recommended for most users
+1. **All tools** (42 tools) - Full feature set, recommended for most users
 2. **Minimal** (5 tools) - Only core operations, maximum efficiency
 3. **Custom** - Pick which groups to enable
 
@@ -139,6 +139,20 @@ Advanced features for power users:
 
 **When to use**: Enable for advanced automation, deployment workflows, or managing multiple servers.
 
+### Cloud (5 tools)
+
+AutoDL GPU cloud instance lifecycle:
+
+- `ssh_autodl_create` - Rent + boot a GPU instance and register it as an ssh-manager server
+- `ssh_autodl_list` - List AutoDL instances, cross-referenced with local registrations
+- `ssh_autodl_status` - Get live status/connection info; refreshes the registered server entry
+- `ssh_autodl_power` - Power an instance on or off
+- `ssh_autodl_destroy` - Power off, release (irreversible), and deregister
+
+**Requires**: `AUTODL_TOKEN` (AutoDL console → 设置 → 开发者Token)
+
+**When to use**: Enable if you rent AutoDL GPU instances for training/inference and want to manage their whole lifecycle — provisioning, connecting, and teardown — from Claude Code / OpenAI Codex.
+
 ## Configuration Modes
 
 ### All Tools Mode
@@ -152,13 +166,14 @@ Advanced features for power users:
     "monitoring": { "enabled": true },
     "backup": { "enabled": true },
     "database": { "enabled": true },
-    "advanced": { "enabled": true }
+    "advanced": { "enabled": true },
+    "cloud": { "enabled": true }
   }
 }
 ```
 
-- **Enabled tools**: 37/37
-- **Context usage**: ~43.5k tokens
+- **Enabled tools**: 42/42
+- **Context usage**: ~45k tokens
 - **Best for**: Users who need all features
 
 ### Minimal Mode
@@ -172,12 +187,13 @@ Advanced features for power users:
     "monitoring": { "enabled": false },
     "backup": { "enabled": false },
     "database": { "enabled": false },
-    "advanced": { "enabled": false }
+    "advanced": { "enabled": false },
+    "cloud": { "enabled": false }
   }
 }
 ```
 
-- **Enabled tools**: 5/37
+- **Enabled tools**: 5/42
 - **Context usage**: ~3.5k tokens
 - **Context savings**: 92% reduction (~40k tokens saved)
 - **Best for**: Simple SSH operations, file transfers, basic command execution
@@ -193,12 +209,13 @@ Advanced features for power users:
     "monitoring": { "enabled": true },
     "backup": { "enabled": false },
     "database": { "enabled": false },
-    "advanced": { "enabled": false }
+    "advanced": { "enabled": false },
+    "cloud": { "enabled": false }
   }
 }
 ```
 
-- **Enabled tools**: Custom (5-37 tools)
+- **Enabled tools**: Custom (5-42 tools)
 - **Context usage**: Varies based on selection
 - **Best for**: Tailoring to specific workflows
 
@@ -220,7 +237,8 @@ Advanced features for power users:
     "monitoring": { "enabled": false },
     "backup": { "enabled": false },
     "database": { "enabled": false },
-    "advanced": { "enabled": false }
+    "advanced": { "enabled": false },
+    "cloud": { "enabled": false }
   },
   "tools": {
     "ssh_session_start": true  // Individual tool override
@@ -270,7 +288,7 @@ ssh-manager tools enable monitoring
 ssh-manager tools configure  # Choose "1) All tools"
 ```
 
-**Result**: 37 tools = ~43.5k tokens
+**Result**: 42 tools = ~45k tokens
 
 ### Scenario 3: Database Administrator
 
@@ -431,7 +449,7 @@ Add comments to your config file to remember why you enabled specific groups:
 
 ### Q: Will existing users see any changes?
 
-**A**: No. If no configuration file exists, all 37 tools are enabled by default (current behavior).
+**A**: No. If no configuration file exists, all 42 tools are enabled by default (current behavior).
 
 ### Q: Can I enable individual tools without enabling the whole group?
 
@@ -451,7 +469,7 @@ Add comments to your config file to remember why you enabled specific groups:
 
 ### Q: How much does minimal mode actually save?
 
-**A**: Minimal mode (5 tools) uses ~3.5k tokens vs all tools (37 tools) at ~43.5k tokens. That's a **92% reduction** or **~40k tokens saved**.
+**A**: Minimal mode (5 tools) uses ~3.5k tokens vs all tools (42 tools) at ~45k tokens. That's a **92% reduction** or **~40k tokens saved**.
 
 ## Command Reference
 

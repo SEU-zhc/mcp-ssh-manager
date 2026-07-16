@@ -174,9 +174,11 @@ async function testForwardAgentCoercion() {
 // Static guard: no handler may access the stale snake_case/lowercase names on a
 // config object. config-loader.js legitimately references them (it parses TOML
 // source keys and serializes back); ssh-manager.js keeps an intentional
-// `keyPath || keypath` fallback for configs supplied by external callers.
+// `keyPath || keypath` fallback for configs supplied by external callers;
+// server-config-manager.js's upsertServer() serializes a single entry back to
+// TOML the same way config-loader.js's exportToToml() does.
 function testNoStaleAccessInSource() {
-  const excluded = new Set(['config-loader.js', 'ssh-manager.js']);
+  const excluded = new Set(['config-loader.js', 'ssh-manager.js', 'server-config-manager.js']);
   const staleAccess = /\.(sudo_password|default_dir|keypath)\b/;
   const offenders = [];
 
@@ -192,10 +194,52 @@ function testNoStaleAccessInSource() {
   ok('no handler reads stale .sudo_password / .default_dir / .keypath fields');
 }
 
+// networkTurbo (AutoDL /etc/network_turbo accelerator) is a boolean flag with the
+// same off-by-default coercion rules as forwardAgent — see testForwardAgentCoercion.
+async function testNetworkTurboCoercion() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-mgr-turbo-'));
+  const envPath = path.join(dir, 'test.env');
+  fs.writeFileSync(envPath, [
+    'SSH_SERVER_NT_ON_HOST=h', 'SSH_SERVER_NT_ON_USER=u', 'SSH_SERVER_NT_ON_NETWORK_TURBO=true',
+    'SSH_SERVER_NT_OFF_HOST=h', 'SSH_SERVER_NT_OFF_USER=u', 'SSH_SERVER_NT_OFF_NETWORK_TURBO=false',
+    'SSH_SERVER_NT_NONE_HOST=h', 'SSH_SERVER_NT_NONE_USER=u',
+    ''
+  ].join('\n'));
+  const tomlPath = path.join(dir, 'config.toml');
+  fs.writeFileSync(tomlPath, [
+    '[ssh_servers.nt_toml_bool]', 'host = "h"', 'user = "u"', 'network_turbo = true',
+    '[ssh_servers.nt_toml_none]', 'host = "h"', 'user = "u"',
+    ''
+  ].join('\n'));
+
+  try {
+    const envLoader = new ConfigLoader();
+    const envs = await envLoader.load({ envPath, tomlPath: path.join(dir, 'absent.toml') });
+    assert.strictEqual(envs.get('nt_on').networkTurbo, true, 'env NETWORK_TURBO=true → true');
+    assert.strictEqual(envs.get('nt_off').networkTurbo, false, 'env NETWORK_TURBO=false → false');
+    assert.strictEqual(envs.get('nt_none').networkTurbo, false, 'no NETWORK_TURBO → false');
+
+    const exported = envLoader.exportToToml();
+    assert.ok(/network_turbo = true/.test(exported), 'exportToToml emits network_turbo = true for opted-in server');
+
+    const tomlLoader = new ConfigLoader();
+    const toml = await tomlLoader.load({ envPath: path.join(dir, 'absent.env'), tomlPath });
+    assert.strictEqual(toml.get('nt_toml_bool').networkTurbo, true, 'TOML network_turbo = true → true');
+    assert.strictEqual(toml.get('nt_toml_none').networkTurbo, false, 'no network_turbo → false');
+    ok('networkTurbo coerces env/TOML booleans correctly and round-trips through exportToToml');
+  } finally {
+    for (const key of Object.keys(process.env)) {
+      if (key.startsWith('SSH_SERVER_NT_')) delete process.env[key];
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 async function main() {
   await testEnvFieldNames();
   await testTomlFieldNames();
   await testForwardAgentCoercion();
+  await testNetworkTurboCoercion();
   testNoStaleAccessInSource();
   console.log(`\n✅ config field name tests passed (${passed} checks)`);
 }

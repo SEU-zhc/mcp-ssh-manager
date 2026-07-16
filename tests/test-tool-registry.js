@@ -53,16 +53,16 @@ function assertTrue(condition, message) {
 console.log('\n' + YELLOW + 'Running Tool Registry Tests...' + NC + '\n');
 
 // Test 1: All tools are accounted for
-test('All 37 tools are defined in groups', () => {
+test('All 42 tools are defined in groups', () => {
   const allTools = getAllTools();
-  assertEqual(allTools.length, 37, 'Should have exactly 37 tools');
+  assertEqual(allTools.length, 42, 'Should have exactly 42 tools');
 });
 
 // Test 2: No duplicate tools
 test('No duplicate tools across groups', () => {
   const allTools = getAllTools();
   const uniqueTools = new Set(allTools);
-  assertEqual(uniqueTools.size, 37, 'All 37 tools should be unique');
+  assertEqual(uniqueTools.size, 42, 'All 42 tools should be unique');
 });
 
 // Test 3: Tool group counts are correct
@@ -129,9 +129,9 @@ test('verifyIntegrity returns valid', () => {
 // Test 9: getToolStats returns correct stats
 test('getToolStats returns correct statistics', () => {
   const stats = getToolStats();
-  assertEqual(stats.totalGroups, 6, 'Should have 6 groups');
-  assertEqual(stats.totalTools, 37, 'Should have 37 total tools');
-  assertEqual(stats.groups.length, 6, 'Should have 6 group entries');
+  assertEqual(stats.totalGroups, 7, 'Should have 7 groups');
+  assertEqual(stats.totalTools, 42, 'Should have 42 total tools');
+  assertEqual(stats.groups.length, 7, 'Should have 7 group entries');
 });
 
 // Test 10: All tool names follow naming convention
@@ -153,8 +153,8 @@ test('validateToolRegistry identifies correct tools', () => {
   assertTrue(validation.valid, 'Validation should pass for all tools');
   assertEqual(validation.missing.length, 0, 'Should have no missing tools');
   assertEqual(validation.unexpected.length, 0, 'Should have no unexpected tools');
-  assertEqual(validation.total, 37, 'Should expect 37 tools');
-  assertEqual(validation.registered, 37, 'Should register 37 tools');
+  assertEqual(validation.total, 42, 'Should expect 42 tools');
+  assertEqual(validation.registered, 42, 'Should register 42 tools');
 });
 
 // Test 12: validateToolRegistry catches missing tools
@@ -175,6 +175,7 @@ test('Group sizes match specifications', () => {
   assertEqual(TOOL_GROUPS.backup.length, 4, 'Backup should have 4 tools');
   assertEqual(TOOL_GROUPS.database.length, 4, 'Database should have 4 tools');
   assertEqual(TOOL_GROUPS.advanced.length, 14, 'Advanced should have 14 tools');
+  assertEqual(TOOL_GROUPS.cloud.length, 5, 'Cloud should have 5 tools');
 });
 
 // Summary
