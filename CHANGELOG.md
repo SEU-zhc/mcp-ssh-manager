@@ -5,6 +5,16 @@ All notable changes to MCP SSH Manager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `ssh_execute`/`ssh_execute_sudo`/`ssh_execute_group` no longer falsely time out on commands that background a long-running child (`nohup cmd > log 2>&1 &`, e.g. training/eval runs). The shared exec wrapper now runs `exec 0</dev/null; <command>` before anything else, so a backgrounded child inherits an already-closed stdin instead of the live SSH exec channel's stdin pipe — previously the channel wouldn't get an EOF/close from the server until every descendant closed that fd, so a detached job hung the call for the full timeout (reported as `Command timeout after Nms`) even though the remote job had started fine and kept running (confirmed via `pgrep`). New `src/exec-helpers.js` (`withStdinDetached`), covered by `tests/test-exec-helpers.js`.
+
+### Added
+
+- **Explicit background execution** — `ssh_execute` gained a `background` parameter (plus optional `logFile`). When set, the command is launched detached (`nohup sh -c '<cmd>' > logFile 2>&1 </dev/null &`, `$!` echoed back) and the call returns immediately with `{ pid, logFile }` instead of waiting for completion — replaces hand-rolled `nohup ... &` + separate polling with a supported, correctly-detached path. Follow up with `ssh_tail` (`follow: false`) to read `logFile`, or `ssh_process_manager` (`info`/`kill`) on `pid`. New `src/exec-helpers.js` (`buildBackgroundCommand`, `parseBackgroundPid`, `defaultBackgroundLogFile`), covered by `tests/test-exec-helpers.js`.
+
 ## [3.8.0] - 2026-07-16
 
 ### Added

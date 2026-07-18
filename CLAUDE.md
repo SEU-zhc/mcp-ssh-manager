@@ -90,7 +90,7 @@ The server exposes these tools to Claude Code and OpenAI Codex:
 
 ### Core Tools
 - `ssh_list_servers`: List all configured SSH servers
-- `ssh_execute`: Execute commands on remote servers (supports default directories)
+- `ssh_execute`: Execute commands on remote servers (supports default directories). For jobs that outlive the timeout (training runs, evals), pass `background: true` instead of hand-rolling `nohup ...&` — it returns immediately with `{ pid, logFile }`; poll with `ssh_tail` (`follow: false`) or `ssh_process_manager`. All one-shot exec tools (`ssh_execute`/`ssh_execute_sudo`/`ssh_execute_group`) also detach the exec channel's stdin (`exec 0</dev/null;`) before running anything, so a command that backgrounds a child itself can't hang the call waiting for the channel to close (see `src/exec-helpers.js`).
 - `ssh_upload`: Upload files to remote servers
 - `ssh_download`: Download files from remote servers
 

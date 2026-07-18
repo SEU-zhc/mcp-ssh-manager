@@ -48,6 +48,12 @@ import {
 import { logger } from './logger.js';
 import { parseRsyncStats } from './rsync-stats.js';
 import {
+  withStdinDetached,
+  buildBackgroundCommand,
+  parseBackgroundPid,
+  defaultBackgroundLogFile
+} from './exec-helpers.js';
+import {
   createSession,
   getSession,
   listSessions,
@@ -325,10 +331,12 @@ async function execCommandWithTimeout(ssh, command, options = {}, timeoutMs = 30
   // guard was made redundant by the early-return path.
   const useSystemTimeout = timeoutMs > 0 && timeoutMs < 300000 && !rawCommand; // Max 5 minutes, not for raw commands
 
+  const detachedCommand = withStdinDetached(command, { rawCommand });
+
   if (useSystemTimeout) {
     // Wrap command with timeout command (works on Linux/Mac)
     const timeoutSeconds = Math.ceil(timeoutMs / 1000);
-    const wrappedCommand = `timeout ${timeoutSeconds} sh -c '${command.replace(/'/g, '\'\\\'\'')}'`;
+    const wrappedCommand = `timeout ${timeoutSeconds} sh -c '${detachedCommand.replace(/'/g, '\'\\\'\'')}'`;
 
     try {
       const result = await ssh.execCommand(wrappedCommand, {
@@ -364,7 +372,7 @@ async function execCommandWithTimeout(ssh, command, options = {}, timeoutMs = 30
     }
   } else {
     // No timeout or very long timeout, execute normally
-    return ssh.execCommand(command, { ...options, timeout: timeoutMs });
+    return ssh.execCommand(detachedCommand, { ...options, timeout: timeoutMs });
   }
 }
 
@@ -642,15 +650,17 @@ function registerToolConditional(toolName, schema, handler) {
 registerToolConditional(
   'ssh_execute',
   {
-    description: 'Runs a shell command over SSH on a named configured server and returns stdout, stderr, and exit code. Mutates remote state depending on the command; not read-only. Expands command aliases before running. Uses the cwd parameter or, if omitted, the server configured default directory; adapts syntax for Linux versus Windows PowerShell targets. Timeout defaults to 120000 ms and is capped at 300000 ms. Under readonly mode destructive commands like rm or dd are refused; under restricted mode the command must match allow patterns. Output is truncated when very large.',
+    description: 'Runs a shell command over SSH on a named configured server and returns stdout, stderr, and exit code. Mutates remote state depending on the command; not read-only. Expands command aliases before running. Uses the cwd parameter or, if omitted, the server configured default directory; adapts syntax for Linux versus Windows PowerShell targets. Timeout defaults to 120000 ms and is capped at 300000 ms. Under readonly mode destructive commands like rm or dd are refused; under restricted mode the command must match allow patterns. Output is truncated when very large. For jobs that outlive the timeout (training runs, long evals), set background to true instead of backgrounding it yourself with nohup/& — it detaches the command server-side and returns immediately with a pid and logFile instead of waiting; poll progress with ssh_tail (follow: false) or ssh_process_manager.',
     inputSchema: {
       server: z.string().describe('Server name from configuration'),
       command: z.string().describe('Command to execute'),
       cwd: z.string().optional().describe('Working directory (optional, uses default if configured)'),
-      timeout: z.number().optional().describe('Command timeout in milliseconds (default: 120000, max: 300000)')
+      timeout: z.number().optional().describe('Command timeout in milliseconds (default: 120000, max: 300000). Ignored when background is true.'),
+      background: z.boolean().optional().describe('Run the command fully detached from this SSH session and return immediately with { pid, logFile } instead of waiting for it to finish. Use for long-running jobs (training, evals) instead of hand-rolling nohup — this handles detaching stdin/output correctly so the call cannot hang or falsely time out while the job keeps running remotely.'),
+      logFile: z.string().optional().describe('Remote path to write stdout/stderr to when background is true (default: an auto-generated path under /tmp)')
     }
   },
-  async ({ server: serverName, command, cwd, timeout = TIMEOUTS.DEFAULT_COMMAND_TIMEOUT }) => {
+  async ({ server: serverName, command, cwd, timeout = TIMEOUTS.DEFAULT_COMMAND_TIMEOUT, background = false, logFile }) => {
     // Cap timeout at maximum allowed
     const cappedTimeout = Math.min(timeout, TIMEOUTS.MAX_COMMAND_TIMEOUT);
 
@@ -692,6 +702,47 @@ registerToolConditional(
         fullCommand = expandedCommand;
       }
       fullCommand = autodl.withNetworkTurbo(serverConfig, platform, fullCommand);
+
+      if (background) {
+        if (platform === 'windows') {
+          throw new Error('background is not supported for windows targets; use Start-Process yourself instead');
+        }
+
+        const remoteLogFile = logFile || defaultBackgroundLogFile();
+        const bgCommand = buildBackgroundCommand(fullCommand, remoteLogFile);
+
+        const bgStartTime = logger.logCommand(serverName, bgCommand, workingDir);
+        const bgResult = await execCommandWithTimeout(ssh, bgCommand, { platform }, 15000);
+        logger.logCommandResult(serverName, bgCommand, bgStartTime, bgResult);
+
+        const pid = parseBackgroundPid(bgResult.stdout);
+        const started = pid !== null;
+
+        await auditOk(serverName, 'ssh_execute', { command, cwd, background: true }, {
+          success: started,
+          pid: started ? pid : null,
+          logFile: remoteLogFile,
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: formatJSONResponse({
+                server: serverName,
+                command: fullCommand,
+                background: true,
+                success: started,
+                pid: started ? pid : null,
+                logFile: remoteLogFile,
+                error: started ? undefined : truncateOutput(bgResult.stderr || 'Failed to launch background job', 1000),
+                note: 'Process is detached from this SSH session and keeps running independently. Use ssh_tail (server, file: logFile, follow: false) to read its output so far, or ssh_process_manager (action: "info"/"kill", pid) to check on or stop it.',
+              }),
+            },
+          ],
+          isError: !started
+        };
+      }
 
       // Log command execution
       const startTime = logger.logCommand(serverName, fullCommand, workingDir);
